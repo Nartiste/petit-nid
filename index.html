@@ -1,0 +1,750 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=240,height=282,initial-scale=1,user-scalable=no,viewport-fit=cover">
+<title>Petit Nid</title>
+<style>
+  html,body{margin:0;padding:0;background:#1a1226;overflow:hidden;height:100%;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}
+  body{display:flex;align-items:center;justify-content:center;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+  #app{position:relative;width:240px;height:282px;overflow:hidden;background:#ffeef6;border-radius:0;touch-action:none}
+  canvas{display:block;width:240px;height:282px}
+  /* Écran de configuration (DOM car il faut un clavier) */
+  #setup{position:absolute;inset:0;background:linear-gradient(#fff3f9,#ffe0ee);display:none;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:14px;box-sizing:border-box;color:#6b3f5c}
+  #setup.on{display:flex}
+  #setup h1{font-size:20px;margin:0 0 2px;color:#e0559a;letter-spacing:.5px}
+  #setup p{font-size:11px;margin:0 0 4px;text-align:center;line-height:1.3}
+  #setup label{font-size:11px;font-weight:700;align-self:flex-start}
+  #setup input{width:100%;box-sizing:border-box;font-size:15px;padding:7px 9px;border:2px solid #f3b7d2;border-radius:12px;background:#fff;color:#6b3f5c;outline:none}
+  #setup input:focus{border-color:#e0559a}
+  #setup button{margin-top:6px;width:100%;font-size:15px;font-weight:800;padding:9px;border:0;border-radius:14px;background:#e0559a;color:#fff}
+  /* Aide clavier, visible seulement sur grand écran (test sur ordinateur) */
+  #desk{display:none;position:fixed;left:12px;bottom:12px;color:#c8b6d6;font-size:12px;line-height:1.6;max-width:330px}
+  #desk b{color:#fff}
+  @media (min-width:400px) and (min-height:400px){
+    #app{border-radius:28px;box-shadow:0 0 0 10px #2b2036,0 0 0 12px #3e3050,0 30px 80px #0008}
+    #desk{display:block}
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <canvas id="c" width="240" height="282"></canvas>
+  <div id="setup">
+    <h1>♡ Petit Nid</h1>
+    <p>Un petit couple vit ici.<br>Donnez-leur vos prénoms.</p>
+    <label>Lui</label><input id="n1" maxlength="10" value="Alan">
+    <label>Elle</label><input id="n2" maxlength="10" value="Chérie">
+    <button id="start">Emménager ♡</button>
+  </div>
+</div>
+<div id="desk">
+  <b>Test clavier (simulation R1)</b><br>
+  ↑ ↓ ou molette souris = molette R1 · <b>Entrée</b> / clic = bouton latéral<br>
+  <b>Espace maintenu</b> = appui long (parler) · <b>S</b> = secouer · <b>F</b> = face contre table<br>
+  <b>← →</b> = incliner · <b>R</b> = réinitialiser la partie
+</div>
+<script>
+'use strict';
+/* =====================================================================
+   PETIT NID — Tamagotchi de couple pour Rabbit R1
+   Écran 240×282 · Canvas 2D · Molette, bouton latéral, appui long,
+   accéléromètre, tactile, voix R1, stockage R1, temps réel.
+   ===================================================================== */
+
+const W = 240, H = 282;
+const cv = document.getElementById('c');
+const ctx = cv.getContext('2d');
+const $ = id => document.getElementById(id);
+
+/* ---------- Réglages d'équilibrage ---------- */
+const DECAY = { faim: 4, energie: 3, amour: 2.5, fun: 4, propre: 2 }; // points perdus par heure (une nuit ≈ −35 faim)
+const SLEEP_REGEN = 40;       // énergie gagnée par heure de sommeil
+const MAX_OFFLINE_H = 36;     // on ne simule pas plus que ça d'absence
+const NEEDS = ['faim', 'energie', 'amour', 'fun', 'propre'];
+const NEED_ICON = { faim: '🍙', energie: '💤', amour: '💗', fun: '🎈', propre: '🫧' };
+const NEED_NAME = { faim: 'Faim', energie: 'Énergie', amour: 'Amour', fun: 'Fun', propre: 'Propreté' };
+
+const SHOP = [
+  { id: 'plante',    name: 'Plante',    price: 30,  fun: 3 },
+  { id: 'lampe',     name: 'Lampe',     price: 40,  fun: 3 },
+  { id: 'tableau',   name: 'Tableau',   price: 50,  fun: 4 },
+  { id: 'tapis',     name: 'Tapis',     price: 60,  fun: 4 },
+  { id: 'guirlande', name: 'Guirlande', price: 80,  fun: 5 },
+  { id: 'chat',      name: 'Chaton',    price: 120, fun: 8 },
+];
+const MILESTONES = [
+  { day: 2,   title: 'Premier week-end',  text: 'Deux jours ensemble déjà !',          gift: null },
+  { day: 3,   title: 'Cadre photo',        text: 'Une photo de vous deux au mur.',      gift: 'photo' },
+  { day: 7,   title: 'Une semaine ♡',      text: 'Un chaton vient vivre avec vous.',    gift: 'chat' },
+  { day: 14,  title: 'Deux semaines',      text: 'Il lui offre une bague…',             gift: 'bague' },
+  { day: 30,  title: 'Un mois !',          text: 'Le mariage ! Confettis partout.',     gift: 'mariage' },
+  { day: 100, title: '100 jours',          text: 'Un bébé mochi arrive au nid.',        gift: 'bebe' },
+];
+
+/* ---------- Pont R1 (matériel, stockage, voix) ---------- */
+const R1 = {
+  onDevice: typeof PluginMessageHandler !== 'undefined',
+  store: (window.creationStorage && window.creationStorage.plain) || null,
+  async load() {
+    try {
+      if (this.store) { const v = await this.store.getItem('petitnid'); if (v) return JSON.parse(atob(v)); }
+    } catch (e) {}
+    try { const v = localStorage.getItem('petitnid'); if (v) return JSON.parse(v); } catch (e) {}
+    return null;
+  },
+  async save(obj) {
+    const s = JSON.stringify(obj);
+    try { if (this.store) await this.store.setItem('petitnid', btoa(unescape(encodeURIComponent(s)))); } catch (e) {}
+    try { localStorage.setItem('petitnid', s); } catch (e) {}
+  },
+  // Fait parler le R1 avec sa propre voix (via le LLM) ; sur ordinateur, synthèse vocale si dispo.
+  speak(text) {
+    if (this.onDevice) {
+      try {
+        PluginMessageHandler.postMessage(JSON.stringify({
+          message: 'Répète exactement ce texte à voix haute, en français, sans rien ajouter ni commenter : « ' + text + ' »',
+          useLLM: true, wantsR1Response: true
+        }));
+      } catch (e) {}
+    } else if (window.speechSynthesis) {
+      try { const u = new SpeechSynthesisUtterance(text); u.lang = 'fr-FR'; u.rate = 1.05; speechSynthesis.speak(u); } catch (e) {}
+    }
+  },
+  // Demande au LLM du R1 une phrase du couple, prononcée à voix haute.
+  talk(prompt) {
+    if (this.onDevice) {
+      try { PluginMessageHandler.postMessage(JSON.stringify({ message: prompt, useLLM: true, wantsR1Response: true })); } catch (e) {}
+      return true;
+    }
+    return false;
+  },
+  accel(cb) {
+    const s = window.creationSensors && window.creationSensors.accelerometer;
+    if (s) {
+      try {
+        s.start(d => {
+          if (!d) return;
+          const x = d.x !== undefined ? d.x : (d.tiltX || 0);
+          const y = d.y !== undefined ? d.y : (d.tiltY || 0);
+          const z = d.z !== undefined ? d.z : (d.tiltZ !== undefined ? d.tiltZ : 1);
+          cb(x, y, z);
+        }, { frequency: 30 });
+        return;
+      } catch (e) {}
+    }
+    // Repli navigateur (téléphone) : DeviceMotion
+    window.addEventListener('devicemotion', e => {
+      const g = e.accelerationIncludingGravity; if (!g) return;
+      cb((g.x || 0) / 9.81, (g.y || 0) / 9.81, (g.z || 0) / 9.81);
+    });
+  }
+};
+
+/* ---------- État ---------- */
+let S = null;          // sauvegarde
+let mode = 'room';     // room | cook | work | hug | bath | sleep | shop | msg | celebrate
+let sel = 0;           // objet sélectionné dans la pièce
+let t = 0, last = 0;   // temps d'animation
+let tilt = { x: 0, y: 0, z: 1 }, tiltSm = { x: 0 };
+let faceDownSince = 0;
+let scared = 0, loveBurst = 0, zzz = 0;
+let bubble = null;     // {text, until}
+let particles = [];
+let mini = null;       // état du mini-jeu courant
+let msgQueue = [];     // messages/overlays à afficher
+let longPressing = false, longStart = 0;
+let dirty = false;
+let lastSave = 0;
+
+function fresh(n1, n2) {
+  const now = Date.now();
+  return {
+    v: 1, names: [n1 || 'Lui', n2 || 'Elle'],
+    needs: { faim: 80, energie: 85, amour: 75, fun: 70, propre: 80 },
+    money: 40, start: now, last: now, streak: 1, lastVisit: dayKey(now),
+    owned: [], unlocked: [], talks: 0, talkDay: dayKey(now), sleeping: false, sleepSince: 0,
+    stats: { repas: 0, travail: 0, calins: 0, bains: 0 }
+  };
+}
+const dayKey = ts => Math.floor((ts + new Date().getTimezoneOffset() * -60000) / 86400000);
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const dayCount = () => Math.floor((Date.now() - S.start) / 86400000) + 1;
+const avgMood = () => NEEDS.reduce((a, k) => a + S.needs[k], 0) / NEEDS.length;
+const hour = () => new Date().getHours();
+const isNight = () => hour() >= 22 || hour() < 7;
+
+function addNeed(k, v) { S.needs[k] = clamp(S.needs[k] + v, 0, 100); dirty = true; }
+
+/* Simulation du temps écoulé (en ligne et hors ligne) */
+function simulate(now) {
+  let dt = (now - S.last) / 3600000; // heures
+  if (dt <= 0) { S.last = now; return null; }
+  const realDt = dt;
+  dt = Math.min(dt, MAX_OFFLINE_H);
+  const before = Object.assign({}, S.needs);
+  for (const k of NEEDS) {
+    let rate = DECAY[k];
+    if (S.sleeping) rate = k === 'energie' ? -SLEEP_REGEN * (faceDownBonus() ? 2 : 1) : rate * 0.5;
+    S.needs[k] = clamp(S.needs[k] - rate * dt, 3, 100);
+  }
+  // Fun de la déco : freine l'ennui
+  const decoFun = S.owned.reduce((a, id) => a + ((SHOP.find(s => s.id === id) || {}).fun || 0), 0);
+  S.needs.fun = clamp(S.needs.fun + decoFun * dt * 0.3, 3, 100);
+  // Dormir trop longtemps = réveil automatique
+  if (S.sleeping && S.needs.energie >= 99) S.sleeping = false;
+  S.last = now;
+  dirty = true;
+  return realDt > 0.5 ? { hours: realDt, before } : null;
+}
+function faceDownBonus() { return tilt.z < -0.5; }
+
+/* Série de jours (streak) + paliers */
+function checkDaily() {
+  const today = dayKey(Date.now());
+  if (S.lastVisit === today - 1) S.streak++;
+  else if (S.lastVisit !== today) S.streak = 1;
+  if (S.lastVisit !== today) { S.lastVisit = today; S.talks = 0; S.talkDay = today; dirty = true; }
+  for (const m of MILESTONES) {
+    if (dayCount() >= m.day && !S.unlocked.includes(m.day)) {
+      S.unlocked.push(m.day);
+      if (m.gift) S.owned.push(m.gift);
+      msgQueue.push({ type: 'celebrate', title: m.title, text: m.text });
+      dirty = true;
+    }
+  }
+}
+
+/* ---------- Objets de la pièce ---------- */
+// Coordonnées iso : i vers la droite/bas, j vers la gauche/bas
+const iso = (i, j) => ({ x: 120 + (i - j) * 26, y: 118 + (i + j) * 13 });
+const OBJECTS = [
+  { id: 'lit',     label: 'Dormir',        icon: '🛏', i: 0.55, j: 1.0, hint: 'Clic : se coucher · Face contre table : nuit' },
+  { id: 'cuisine', label: 'Cuisiner',      icon: '🍳', i: 1.7,  j: 0.45, hint: 'Clic au bon moment ×3 · 5 €' },
+  { id: 'canape',  label: 'Câlin',         icon: '💗', i: 1.9,  j: 2.1, hint: 'Tapote l’écran ou le bouton' },
+  { id: 'bain',    label: 'Bain',          icon: '🫧', i: 0.5,  j: 2.75, hint: 'Secoue le R1 pour les bulles' },
+  { id: 'porte',   label: 'Travailler',    icon: '💼', i: 3.05, j: 0.5, hint: 'Tourne la molette à fond' },
+  { id: 'shop',    label: 'Boutique',      icon: '🛍', i: 2.9,  j: 3.0, hint: 'Déco pour le nid' },
+];
+
+/* ---------- Entrées ---------- */
+function onWheel(dir) {
+  if (mode === 'room') { sel = (sel + dir + OBJECTS.length) % OBJECTS.length; ping(); }
+  else if (mode === 'shop') { mini.idx = clamp(mini.idx + dir, 0, SHOP.length); ping(); }
+  else if (mode === 'work' && mini.running) { mini.count++; mini.pedal = 1; }
+  else if (mode === 'sleep') wake('Réveil en douceur');
+}
+let lastClick = 0;
+function onClick() {
+  const now = performance.now(); if (now - lastClick < 70) return; lastClick = now; // le double-clic R1 = 2 sideClick à ~50 ms
+  if (msgQueue.length && (mode === 'msg' || mode === 'celebrate')) { msgQueue.shift(); nextMsg(); return; }
+  switch (mode) {
+    case 'room': activate(OBJECTS[sel]); break;
+    case 'cook': cookPress(); break;
+    case 'hug': hugTap(); break;
+    case 'bath': bathSplash(0.5); break;
+    case 'work': if (!mini.running && mini.done) endWork(); break;
+    case 'shop': shopBuy(); break;
+    case 'sleep': wake('Bien dormi ?'); break;
+  }
+}
+function onTap(x, y) {
+  if (mode === 'hug') { hugTap(x, y); return; }
+  if (mode === 'room') {
+    // Toucher un objet le sélectionne directement, toucher le même l'active
+    let best = -1, bd = 1e9;
+    OBJECTS.forEach((o, k) => { const p = iso(o.i, o.j); const d = Math.hypot(p.x - x, p.y - y + 10); if (d < bd) { bd = d; best = k; } });
+    if (bd < 34) { if (sel === best) onClick(); else { sel = best; ping(); } return; }
+  }
+  onClick();
+}
+function onLongStart() {
+  if (mode !== 'room' && mode !== 'sleep') return;
+  longPressing = true; longStart = performance.now();
+}
+function onLongEnd() {
+  if (!longPressing) return; longPressing = false;
+  talkToCouple();
+}
+function onShake() {
+  if (mode === 'bath') { bathSplash(1); return; }
+  if (mode === 'sleep') { wake('Hé ! Secoués en plein sommeil…'); addNeed('amour', -3); addNeed('fun', -2); return; }
+  if (mode === 'room') { scared = 1.4; addNeed('fun', -1); say('Aaah ! Ça tremble !'); }
+}
+
+/* ---------- Actions / mini-jeux ---------- */
+function activate(o) {
+  switch (o.id) {
+    case 'lit': startSleep(); break;
+    case 'cuisine':
+      if (S.money < 5) { toast('Il faut 5 € pour cuisiner'); break; }
+      mode = 'cook'; mini = { round: 0, hits: [], zone: Math.random() * 100 + 30, t0: t, flash: 0 }; break;
+    case 'canape': mode = 'hug'; mini = { t0: t, taps: 0, dur: 5 }; break;
+    case 'bain': mode = 'bath'; mini = { t0: t, bubbles: 0, dur: 5 }; break;
+    case 'porte':
+      if (S.needs.energie < 15) { toast('Trop fatigués pour travailler'); say('Pas ce soir…'); break; }
+      mode = 'work'; mini = { t0: t, count: 0, dur: 6, running: true, done: false, pedal: 0 }; break;
+    case 'shop': mode = 'shop'; mini = { idx: 0 }; break;
+  }
+}
+/* Cuisine : appuyer quand le curseur est dans la zone verte, 3 fois */
+function cookPress() {
+  const pos = cookPos();
+  const d = Math.abs(pos - mini.zone);
+  const score = d < 9 ? 2 : d < 20 ? 1 : 0;
+  mini.hits.push(score); mini.flash = score ? 0.4 : 0.25; mini.round++;
+  mini.zone = 30 + Math.random() * 120;
+  spawn(iso(1.7, 0.45), score ? '✨' : '💨', 3);
+  if (mini.round >= 3) {
+    const total = mini.hits.reduce((a, b) => a + b, 0); // 0..6
+    S.money -= 5; S.stats.repas++;
+    const gain = 10 + total * 6;
+    addNeed('faim', gain); addNeed('fun', total >= 5 ? 6 : 2); addNeed('propre', -3);
+    const txt = total >= 5 ? 'Un festin ! Miam !' : total >= 3 ? 'C’était bon.' : 'Un peu cramé… mais c’est fait avec amour.';
+    finish(`🍳 Repas  +${gain} faim`, txt);
+    if (total >= 5) say('Mmmh, c’est délicieux !');
+  }
+}
+const cookPos = () => 90 + 90 * Math.sin((t - mini.t0) * 4.2 + mini.round);
+/* Câlin : tapoter */
+function hugTap(x, y) {
+  if (t - mini.t0 > mini.dur) return;
+  mini.taps++;
+  spawn({ x: x || 120 + (Math.random() - .5) * 80, y: y || 160 }, '💗', 1);
+  loveBurst = 0.5;
+}
+function endHug() {
+  const n = Math.min(mini.taps, 30);
+  const gain = 8 + Math.round(n * 0.8);
+  addNeed('amour', gain); addNeed('fun', 4); S.stats.calins++;
+  finish(`💗 Câlin  +${gain} amour`, n >= 20 ? 'Ils fondent complètement.' : n >= 10 ? 'Un câlin tout doux.' : 'Un petit câlin timide.');
+  if (n >= 20) say('Je t’aime fort !');
+}
+/* Bain : secouer */
+function bathSplash(k) {
+  if (t - mini.t0 > mini.dur) return;
+  mini.bubbles += k;
+  spawn(iso(0.5, 2.75), '🫧', k >= 1 ? 3 : 1);
+}
+function endBath() {
+  const n = Math.min(mini.bubbles, 25);
+  const gain = 12 + Math.round(n * 1.4);
+  addNeed('propre', gain); addNeed('fun', 3); addNeed('energie', 2); S.stats.bains++;
+  finish(`🫧 Bain  +${gain} propreté`, n >= 15 ? 'Une montagne de mousse !' : n >= 6 ? 'Tout propres, tout doux.' : 'Un bain vite fait.');
+}
+/* Travail : pédaler avec la molette */
+function endWork() {
+  const n = mini.count;
+  const pay = 8 + Math.round(n * 0.9);
+  S.money += pay; S.stats.travail++;
+  addNeed('energie', -18); addNeed('fun', -8); addNeed('faim', -6);
+  finish(`💼 Journée  +${pay} €`, n >= 30 ? 'Super productifs !' : n >= 12 ? 'Une journée correcte.' : 'Une journée molle…');
+}
+/* Dodo */
+function startSleep() {
+  if (S.needs.energie > 95) { toast('Ils n’ont pas sommeil'); return; }
+  S.sleeping = true; S.sleepSince = Date.now(); mode = 'sleep'; dirty = true;
+  say(isNight() ? 'Bonne nuit…' : 'Petite sieste…');
+}
+function wake(txt) {
+  S.sleeping = false; mode = 'room'; dirty = true; toast(txt);
+}
+/* Boutique */
+function shopBuy() {
+  if (mini.idx === 0) { mode = 'room'; mini = null; return; }
+  const it = SHOP[mini.idx - 1];
+  if (S.owned.includes(it.id)) { toast('Déjà au nid'); return; }
+  if (S.money < it.price) { toast(`Il manque ${it.price - S.money} €`); return; }
+  S.money -= it.price; S.owned.push(it.id); addNeed('fun', 10); dirty = true;
+  mode = 'room'; mini = null;
+  finish(`🛍 ${it.name}`, 'Le nid devient plus joli !');
+  say('Oh, j’adore !');
+}
+/* Parler au couple (appui long) */
+const LINES = [
+  n => `${n[1]} : tu nous as manqué aujourd’hui !`,
+  n => `${n[0]} : on a regardé le plafond ensemble, c’était romantique.`,
+  n => `${n[1]} : on pourrait cuisiner ce soir ?`,
+  n => `${n[0]} : j’ai rangé… enfin, presque.`,
+  n => `${n[1]} : tu sais que je t’aime, toi ?`,
+  n => `${n[0]} : la plante a l’air de nous juger.`,
+];
+function talkToCouple() {
+  if (mode === 'sleep') { say('Chhht… ils dorment.'); return; }
+  const n = S.names, m = avgMood();
+  const low = NEEDS.slice().sort((a, b) => S.needs[a] - S.needs[b])[0];
+  const mood = m > 70 ? 'très heureux' : m > 40 ? 'tranquilles' : 'un peu grognons';
+  const prompt = `Tu joues un petit couple kawaii qui vit dans un jeu Tamagotchi : ${n[0]} (lui) et ${n[1]} (elle). ` +
+    `Ils sont ${mood}. Leur besoin le plus bas est « ${NEED_NAME[low]} » (${Math.round(S.needs[low])}/100). ` +
+    `Ils vivent ensemble depuis ${dayCount()} jour(s). Dis UNE seule phrase courte, mignonne et drôle, en français, ` +
+    `à la première personne (un des deux parle à la personne qui tient l’appareil), sans emoji, maximum 20 mots.`;
+  if (S.talkDay !== dayKey(Date.now())) { S.talks = 0; S.talkDay = dayKey(Date.now()); }
+  if (S.talks < 3) { addNeed('amour', 3); S.talks++; }
+  spawn(iso(1.5, 1.5), '💬', 1);
+  if (!R1.talk(prompt)) { const line = LINES[Math.floor(Math.random() * LINES.length)](n); say(line); }
+  else bubble = { text: '…', until: t + 6 };
+}
+// Réponse du LLM : on l'affiche en bulle (le R1 la dit déjà à voix haute)
+window.onPluginMessage = function (d) {
+  try {
+    let txt = (d && (d.message || d.data)) || '';
+    if (typeof txt !== 'string') txt = JSON.stringify(txt);
+    try { const j = JSON.parse(txt); txt = j.message || j.text || j.reply || txt; } catch (e) {}
+    if (txt) bubble = { text: String(txt).slice(0, 90), until: t + 7 };
+  } catch (e) {}
+};
+
+function finish(title, text) { mode = 'msg'; mini = null; msgQueue.push({ type: 'msg', title, text }); nextMsg(); }
+function nextMsg() {
+  if (!msgQueue.length) { mode = 'room'; return; }
+  mode = msgQueue[0].type;
+  if (mode === 'celebrate') { say(msgQueue[0].title + ' ! ' + msgQueue[0].text); for (let k = 0; k < 10; k++) spawn({ x: 30 + Math.random() * 180, y: 90 + Math.random() * 100 }, ['🎉', '✨', '💖'][k % 3], 1); }
+}
+function say(text) { bubble = { text, until: t + 4.5 }; R1.speak(text); }
+let toastMsg = null; function toast(text) { toastMsg = { text, until: t + 2.2 }; }
+function ping() { /* petit retour visuel sur la sélection */ pingT = t; } let pingT = -9;
+function spawn(p, ch, n) { for (let k = 0; k < n && particles.length < 24; k++) particles.push({ x: p.x + (Math.random() - .5) * 20, y: p.y - 10, vy: -18 - Math.random() * 20, vx: (Math.random() - .5) * 16, ch, life: 1 }); }
+
+/* ---------- Rendu ---------- */
+const PAL = {
+  day:   { sky1: '#bfe6ff', sky2: '#ffe3ef', wallL: '#ffd9e8', wallR: '#ffe9f1', floor: '#f6dcc4', floorLine: '#ecc9ab' },
+  night: { sky1: '#4a3f7a', sky2: '#7a5aa0', wallL: '#8e6fa3', wallR: '#a584b8', floor: '#b79a94', floorLine: '#a68781' },
+};
+function rr(x, y, w, h, r, fill, stroke) {
+  ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+  if (fill) { ctx.fillStyle = fill; ctx.fill(); } if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = 1.5; ctx.stroke(); }
+}
+function poly(pts, fill, stroke) { ctx.beginPath(); pts.forEach((p, k) => k ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])); ctx.closePath(); if (fill) { ctx.fillStyle = fill; ctx.fill(); } if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = 1; ctx.stroke(); } }
+function ell(x, y, rx, ry, fill) { ctx.beginPath(); ctx.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2); ctx.fillStyle = fill; ctx.fill(); }
+function txt(s, x, y, size, color, align, bold) { ctx.font = (bold ? '800 ' : '600 ') + size + 'px system-ui,sans-serif'; ctx.fillStyle = color; ctx.textAlign = align || 'left'; ctx.textBaseline = 'middle'; ctx.fillText(s, x, y); }
+
+function drawHUD() {
+  const night = isNight();
+  rr(0, 0, W, 38, 0, night ? '#2b2242' : '#fff6fa');
+  txt('♡ J' + dayCount(), 6, 10, 11, '#e0559a', 'left', true);
+  txt('🔥' + S.streak, 70, 10, 10, night ? '#ffd27a' : '#c47a2a', 'left', true);
+  txt('🪙 ' + S.money + ' €', W - 6, 10, 11, night ? '#ffe9a8' : '#8a6a1c', 'right', true);
+  // besoins
+  NEEDS.forEach((k, i) => {
+    const x = 4 + i * 47, v = S.needs[k];
+    txt(NEED_ICON[k], x + 1, 27, 11, '#000', 'left');
+    const col = v > 60 ? '#6fd39a' : v > 30 ? '#ffc457' : '#ff6b8a';
+    rr(x + 16, 23, 27, 7, 3.5, night ? '#43386a' : '#f2dbe6');
+    if (v > 2) rr(x + 16, 23, Math.max(5, 27 * v / 100), 7, 3.5, col);
+    if (v < 25 && Math.sin(t * 6) > 0) rr(x + 15, 22, 29, 9, 4.5, null, '#ff6b8a');
+  });
+}
+function drawRoom(night) {
+  const P = night ? PAL.night : PAL.day;
+  const ox = tiltSm.x * 6; // parallaxe à l'inclinaison
+  const g = ctx.createLinearGradient(0, 38, 0, 250); g.addColorStop(0, P.sky1); g.addColorStop(1, P.sky2);
+  ctx.fillStyle = g; ctx.fillRect(0, 38, W, 214);
+  ctx.save(); ctx.translate(ox, 0);
+  // murs
+  const back = iso(0, 0), left = iso(0, 3.6), right = iso(3.6, 0), front = iso(3.6, 3.6);
+  const hWall = 72;
+  poly([[left.x, left.y], [back.x, back.y], [back.x, back.y - hWall], [left.x, left.y - hWall]], P.wallL);
+  poly([[back.x, back.y], [right.x, right.y], [right.x, right.y - hWall], [back.x, back.y - hWall]], P.wallR);
+  // fenêtre sur le mur gauche
+  const wx = (left.x + back.x) / 2 - 6, wy = (left.y + back.y) / 2 - hWall + 14;
+  poly([[wx - 14, wy + 7], [wx + 14, wy - 7], [wx + 14, wy + 23], [wx - 14, wy + 37]], night ? '#2b2a55' : '#cfefff', '#fff');
+  if (night) { txt('🌙', wx, wy + 14, 12, '#fff', 'center'); } else { txt('☀️', wx, wy + 12, 10, '#fff', 'center'); }
+  // tableau / photo sur le mur droit
+  const px = (right.x + back.x) / 2 + 2, py = (right.y + back.y) / 2 - hWall + 18;
+  if (S.owned.includes('photo')) { poly([[px - 11, py - 6], [px + 11, py + 5], [px + 11, py + 23], [px - 11, py + 12]], '#fff', '#e0a0c0'); txt('💑', px, py + 8, 12, '#000', 'center'); }
+  if (S.owned.includes('tableau')) { const qx = px + 28, qy = py + 14; poly([[qx - 10, qy - 5], [qx + 10, qy + 5], [qx + 10, qy + 21], [qx - 10, qy + 11]], '#ffe6a8', '#c9a060'); txt('🌸', qx, qy + 8, 11, '#000', 'center'); }
+  if (S.owned.includes('guirlande')) { for (let k = 0; k < 14; k++) { const f = k / 13; const x = left.x + (right.x - left.x) * f; const y = (f < .5 ? left.y + (back.y - left.y) * f * 2 : back.y + (right.y - back.y) * (f - .5) * 2) - hWall + 6 + Math.sin(k * 1.3) * 3; ell(x, y, 2.2, 2.2, ['#ff8fb1', '#ffd36b', '#8fe3ff', '#b8ff9a'][(k + Math.floor(t * 3)) % 4]); } }
+  // sol
+  poly([[left.x, left.y], [back.x, back.y], [right.x, right.y], [front.x, front.y]], P.floor);
+  ctx.strokeStyle = P.floorLine; ctx.lineWidth = 1;
+  for (let k = 1; k < 4; k++) { const a = iso(k * 0.9, 0), b = iso(k * 0.9, 3.6); ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke(); const c = iso(0, k * 0.9), d = iso(3.6, k * 0.9); ctx.beginPath(); ctx.moveTo(c.x, c.y); ctx.lineTo(d.x, d.y); ctx.stroke(); }
+  if (S.owned.includes('tapis')) { const c = iso(1.9, 2.0); poly([[c.x, c.y - 16], [c.x + 34, c.y + 1], [c.x, c.y + 18], [c.x - 34, c.y + 1]], '#f8b4c8'); poly([[c.x, c.y - 10], [c.x + 22, c.y + 1], [c.x, c.y + 12], [c.x - 22, c.y + 1]], '#ffd9e6'); }
+  // porte sur le mur droit
+  const dp = iso(3.05, 0); poly([[dp.x - 8, dp.y - 4 - 44], [dp.x + 8, dp.y + 4 - 44], [dp.x + 8, dp.y + 4], [dp.x - 8, dp.y - 4]], '#c98f6a', '#8c5b3c'); ell(dp.x + 4, dp.y - 20, 1.6, 1.6, '#ffe28a');
+  // objets + personnages triés par profondeur
+  const items = [];
+  for (const o of OBJECTS) if (o.id !== 'porte') items.push({ d: o.i + o.j, f: () => drawObject(o, night) });
+  if (S.owned.includes('plante')) items.push({ d: 0.2 + 3.3, f: () => { const p = iso(0.2, 3.3); rr(p.x - 6, p.y - 10, 12, 10, 3, '#d98a63'); txt('🌿', p.x, p.y - 16, 15, '#000', 'center'); } });
+  if (S.owned.includes('lampe')) items.push({ d: 3.3 + 0.3, f: () => { const p = iso(3.3, 0.3); ctx.fillStyle = '#9b7b6b'; ctx.fillRect(p.x - 1, p.y - 30, 2, 30); rr(p.x - 9, p.y - 40, 18, 11, 4, night ? '#ffe28a' : '#ffd0e0'); if (night) ell(p.x, p.y - 28, 14, 6, '#ffe28a22'); } });
+  if (S.owned.includes('chat')) items.push({ d: 1.0 + 2.9, f: () => { const p = iso(1.0, 2.9); const b = Math.sin(t * 2) * 1; txt('🐱', p.x, p.y - 8 + b, 15, '#000', 'center'); } });
+  if (S.owned.includes('bebe')) items.push({ d: 2.6 + 1.1, f: () => { const p = iso(2.6, 1.1); txt('👶', p.x, p.y - 8 + Math.sin(t * 3), 14, '#000', 'center'); } });
+  const chars = charPositions();
+  items.push({ d: chars[0].i + chars[0].j, f: () => drawChar(chars[0], 0) });
+  items.push({ d: chars[1].i + chars[1].j, f: () => drawChar(chars[1], 1) });
+  items.sort((a, b) => a.d - b.d).forEach(it => it.f());
+  // curseur de sélection
+  if (mode === 'room') {
+    const o = OBJECTS[sel], p = o.id === 'porte' ? { x: dp.x, y: dp.y - 48 } : iso(o.i, o.j);
+    const pulse = 1 + Math.max(0, 0.25 - (t - pingT)) * 2;
+    ctx.strokeStyle = '#ff5fa0'; ctx.lineWidth = 2; ctx.setLineDash([3, 3]); ctx.lineDashOffset = -t * 20;
+    ctx.beginPath(); ctx.ellipse(p.x, p.y + 2, 22 * pulse, 11 * pulse, 0, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+    txt('▼', p.x, p.y - 38 + Math.sin(t * 5) * 2, 11, '#ff5fa0', 'center', true);
+  }
+  ctx.restore();
+}
+function drawObject(o, night) {
+  const p = iso(o.i, o.j);
+  switch (o.id) {
+    case 'lit':
+      poly([[p.x - 22, p.y - 2], [p.x + 2, p.y - 14], [p.x + 24, p.y - 3], [p.x, p.y + 9]], '#f4a3c0', '#d87aa0');
+      poly([[p.x - 22, p.y - 2], [p.x, p.y + 9], [p.x, p.y + 15], [p.x - 22, p.y + 4]], '#d87aa0');
+      poly([[p.x, p.y + 9], [p.x + 24, p.y - 3], [p.x + 24, p.y + 3], [p.x, p.y + 15]], '#e58fb0');
+      ell(p.x - 10, p.y - 6, 7, 4, '#fff'); txt('♡', p.x + 8, p.y - 1, 9, '#fff', 'center', true);
+      if (mode === 'sleep') { txt('z', p.x + 14 + Math.sin(t * 2) * 3, p.y - 22 - (t * 10 % 14), 10, '#7a5aa0', 'center', true); txt('Z', p.x + 20, p.y - 30 - ((t * 10 + 7) % 14), 12, '#7a5aa0', 'center', true); }
+      break;
+    case 'cuisine':
+      poly([[p.x - 20, p.y - 8], [p.x + 6, p.y - 20], [p.x + 22, p.y - 12], [p.x - 4, p.y]], '#fff', '#d9c5cf');
+      poly([[p.x - 20, p.y - 8], [p.x - 4, p.y], [p.x - 4, p.y + 14], [p.x - 20, p.y + 6]], '#e9d4de');
+      poly([[p.x - 4, p.y], [p.x + 22, p.y - 12], [p.x + 22, p.y + 2], [p.x - 4, p.y + 14]], '#f4e3ea');
+      ell(p.x + 2, p.y - 11, 7, 4, '#6c6c7a'); ell(p.x + 2, p.y - 13, 6, 3, '#9a9aa8');
+      if (mode === 'cook') for (let k = 0; k < 2; k++) txt('~', p.x + 2 + k * 5, p.y - 22 - ((t * 14 + k * 6) % 12), 10, '#bbb', 'center');
+      break;
+    case 'canape':
+      poly([[p.x - 22, p.y - 2], [p.x, p.y - 13], [p.x + 22, p.y - 2], [p.x, p.y + 9]], '#c9b6ec', '#a98fd6');
+      poly([[p.x - 22, p.y - 2], [p.x, p.y + 9], [p.x, p.y + 17], [p.x - 22, p.y + 6]], '#a98fd6');
+      poly([[p.x, p.y + 9], [p.x + 22, p.y - 2], [p.x + 22, p.y + 6], [p.x, p.y + 17]], '#b9a3e0');
+      poly([[p.x - 22, p.y - 2], [p.x, p.y - 13], [p.x, p.y - 22], [p.x - 22, p.y - 11]], '#b39be0');
+      ell(p.x - 8, p.y - 2, 5, 3, '#ffd9e6'); ell(p.x + 8, p.y - 2, 5, 3, '#ffe9a8');
+      break;
+    case 'bain':
+      ell(p.x, p.y + 2, 24, 12, '#bfe6ff'); ell(p.x, p.y - 2, 20, 9, '#e8f7ff'); ell(p.x, p.y - 1, 16, 6, '#9fd8ff');
+      if (mode === 'bath') for (let k = 0; k < 3; k++) ell(p.x - 10 + k * 10, p.y - 8 - ((t * 20 + k * 7) % 16), 3, 3, '#ffffffcc');
+      break;
+    case 'shop':
+      rr(p.x - 14, p.y - 14, 28, 16, 5, '#ffd36b', '#d9a93c'); txt('🛍', p.x, p.y - 6, 12, '#000', 'center');
+      ell(p.x - 8, p.y + 5, 3, 3, '#6b5a4a'); ell(p.x + 8, p.y + 5, 3, 3, '#6b5a4a');
+      break;
+  }
+}
+/* Où sont les personnages selon l'activité */
+function charPositions() {
+  let a = { i: 1.0, j: 2.0 }, b = { i: 2.0, j: 1.1 };
+  const near = (o, di, dj) => ({ i: o.i + di, j: o.j + dj });
+  const O = id => OBJECTS.find(o => o.id === id);
+  if (mode === 'sleep') { a = near(O('lit'), 0.35, -0.1); b = near(O('lit'), 0.1, 0.35); }
+  else if (mode === 'cook') { a = near(O('cuisine'), 0.2, 0.7); b = near(O('cuisine'), 0.9, 0.5); }
+  else if (mode === 'hug') { a = near(O('canape'), -0.15, 0.05); b = near(O('canape'), 0.25, -0.15); }
+  else if (mode === 'bath') { a = near(O('bain'), 0.0, -0.05); b = near(O('bain'), 0.4, 0.2); }
+  else if (mode === 'work') { a = { i: 2.6, j: 0.8 }; b = { i: 2.9, j: 1.3 }; }
+  else if (mode === 'shop') { a = near(O('shop'), -0.6, -0.4); b = near(O('shop'), -0.3, -0.9); }
+  else if (S.needs.amour < 20) { a = { i: 0.8, j: 2.2 }; b = { i: 2.4, j: 0.9 }; } // bouderie : chacun dans son coin
+  return [a, b];
+}
+function drawChar(pos, who) {
+  const p = iso(pos.i, pos.j);
+  const n = S.names[who];
+  const m = avgMood();
+  const bob = mode === 'sleep' ? 0 : Math.sin(t * 3 + who * 1.7) * 1.5;
+  const x = p.x, y = p.y - 6 + bob;
+  const skin = '#ffe3d1', hair = who ? '#6b3a2e' : '#2e2a3a', shirt = who ? '#ff9fbf' : '#8fc9ff';
+  const scaredNow = scared > 0;
+  const sleeping = mode === 'sleep';
+  const inLove = loveBurst > 0 || mode === 'hug';
+  const sulk = S.needs.amour < 20 && mode === 'room';
+  // ombre
+  ell(x, y + 14, 11, 4, '#00000018');
+  // corps
+  rr(x - 9, y - 2, 18, 16, 7, shirt);
+  // tête
+  ell(x, y - 10, 13, 12, skin);
+  // cheveux
+  if (who) { ell(x, y - 16, 14, 8, hair); ell(x - 11, y - 10, 4, 9, hair); ell(x + 11, y - 10, 4, 9, hair); txt('🎀', x + 10, y - 20, 9, '#000', 'center'); }
+  else { ell(x, y - 17, 13, 7, hair); poly([[x - 12, y - 14], [x - 6, y - 22], [x + 2, y - 15]], hair); }
+  // joues
+  ell(x - 7, y - 7, 3, 2, inLove ? '#ff8fb1' : '#ffb7c5aa'); ell(x + 7, y - 7, 3, 2, inLove ? '#ff8fb1' : '#ffb7c5aa');
+  // yeux
+  const blink = (Math.sin(t * 1.3 + who * 2) > 0.985) || sleeping;
+  if (blink) { ctx.strokeStyle = '#3a2a3a'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(x - 7, y - 10); ctx.lineTo(x - 3, y - 10); ctx.moveTo(x + 3, y - 10); ctx.lineTo(x + 7, y - 10); ctx.stroke(); }
+  else if (inLove) { txt('♥', x - 5, y - 10, 9, '#ff4f8a', 'center', true); txt('♥', x + 5, y - 10, 9, '#ff4f8a', 'center', true); }
+  else if (scaredNow) { ell(x - 5, y - 10, 3, 3.5, '#fff'); ell(x + 5, y - 10, 3, 3.5, '#fff'); ell(x - 5, y - 10, 1.5, 1.5, '#3a2a3a'); ell(x + 5, y - 10, 1.5, 1.5, '#3a2a3a'); }
+  else { ell(x - 5, y - 10, 2.2, 2.8, '#3a2a3a'); ell(x + 5, y - 10, 2.2, 2.8, '#3a2a3a'); ell(x - 4.3, y - 11, 0.8, 0.8, '#fff'); ell(x + 5.7, y - 11, 0.8, 0.8, '#fff'); }
+  // bouche
+  ctx.strokeStyle = '#b05070'; ctx.lineWidth = 1.2; ctx.beginPath();
+  if (sleeping) { ctx.arc(x, y - 4, 1.5, 0, Math.PI * 2); }
+  else if (scaredNow) { ctx.arc(x, y - 4, 2.5, 0, Math.PI * 2); }
+  else if (sulk || m < 35) { ctx.arc(x, y - 1, 3, Math.PI * 1.15, Math.PI * 1.85); }
+  else if (m > 65 || inLove) { ctx.arc(x, y - 6, 3, Math.PI * 0.15, Math.PI * 0.85); }
+  else { ctx.moveTo(x - 2, y - 4); ctx.lineTo(x + 2, y - 4); }
+  ctx.stroke();
+  if (scaredNow) txt('!', x + 14, y - 26, 12, '#ff4f8a', 'center', true);
+  if (S.owned.includes('bague') && who === 1) ell(x + 9, y + 6, 1.6, 1.6, '#ffd36b');
+  if (S.owned.includes('mariage')) txt(who ? '👰' : '🤵', x, y - 30, 9, '#000', 'center');
+  // prénom
+  txt(n, x, y + 22, 8, '#6b3f5c', 'center', true);
+}
+function drawBottom() {
+  const night = isNight();
+  rr(0, 252, W, 30, 0, night ? '#2b2242' : '#fff6fa');
+  let label = '', hint = '';
+  if (mode === 'room') { const o = OBJECTS[sel]; label = o.icon + ' ' + o.label; hint = o.hint; }
+  else if (mode === 'sleep') { label = '💤 Ils dorment'; hint = 'Clic ou molette : réveiller'; }
+  else if (mode === 'cook') { label = '🍳 Clic dans la zone verte'; hint = 'Essai ' + (mini.round + 1) + ' / 3'; }
+  else if (mode === 'hug') { label = '💗 Tapote ! ' + mini.taps; hint = Math.max(0, mini.dur - (t - mini.t0)).toFixed(1) + ' s'; }
+  else if (mode === 'bath') { label = '🫧 Secoue ! ' + Math.round(mini.bubbles); hint = Math.max(0, mini.dur - (t - mini.t0)).toFixed(1) + ' s'; }
+  else if (mode === 'work') { label = mini.running ? '💼 Molette ! ' + mini.count : '💼 Clic pour finir'; hint = mini.running ? Math.max(0, mini.dur - (t - mini.t0)).toFixed(1) + ' s' : 'Journée terminée'; }
+  else if (mode === 'shop') { label = '🛍 Boutique'; hint = 'Molette : choisir · Clic : acheter'; }
+  else { label = '♡'; hint = 'Clic pour continuer'; }
+  if (longPressing) { label = '🎙 Ils t’écoutent…'; hint = 'Relâche pour qu’ils parlent'; }
+  txt(label, W / 2, 262, 12, night ? '#ffd9e8' : '#c9407f', 'center', true);
+  txt(hint, W / 2, 275, 8.5, night ? '#b9a8cc' : '#9a7a90', 'center');
+}
+function drawMini() {
+  if (mode === 'cook') {
+    rr(20, 70, 200, 26, 13, '#ffffffdd', '#e0a0c0');
+    const zx = 30 + mini.zone; rr(zx - 12, 72, 24, 22, 11, '#9fe3b0');
+    const cx = 30 + cookPos(); ell(cx, 83, 7, 7, mini.flash > 0 ? (mini.hits[mini.hits.length - 1] ? '#5fcf7f' : '#ff6b8a') : '#e0559a');
+    for (let k = 0; k < 3; k++) txt(k < mini.hits.length ? (mini.hits[k] === 2 ? '⭐' : mini.hits[k] === 1 ? '✨' : '💨') : '·', 100 + k * 20, 108, 12, '#000', 'center');
+  } else if (mode === 'work') {
+    const f = clamp((t - mini.t0) / mini.dur, 0, 1);
+    rr(30, 62, 180, 10, 5, '#ffffffcc'); rr(30, 62, 180 * (1 - f), 10, 5, '#8fc9ff');
+    const ang = t * 6 * (mini.pedal > 0 ? 2 : 0.3);
+    ctx.save(); ctx.translate(120, 100); ctx.rotate(ang); ctx.strokeStyle = '#6b5a4a'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(0, 0, 14, 0, Math.PI * 2); ctx.moveTo(-14, 0); ctx.lineTo(14, 0); ctx.moveTo(0, -14); ctx.lineTo(0, 14); ctx.stroke(); ctx.restore();
+    txt('🚲', 120, 100, 10, '#000', 'center');
+    if (mini.running && f >= 1) { mini.running = false; mini.done = true; }
+    mini.pedal = Math.max(0, mini.pedal - 0.08);
+  } else if (mode === 'hug') {
+    const f = clamp((t - mini.t0) / mini.dur, 0, 1);
+    rr(30, 62, 180, 10, 5, '#ffffffcc'); rr(30, 62, 180 * (1 - f), 10, 5, '#ff8fb1');
+    if (f >= 1) endHug();
+  } else if (mode === 'bath') {
+    const f = clamp((t - mini.t0) / mini.dur, 0, 1);
+    rr(30, 62, 180, 10, 5, '#ffffffcc'); rr(30, 62, 180 * (1 - f), 10, 5, '#9fd8ff');
+    if (f >= 1) endBath();
+  } else if (mode === 'shop') {
+    rr(14, 50, 212, 196, 16, '#fff9fcf2', '#f3b7d2');
+    txt('🛍 Boutique du nid', 120, 66, 13, '#e0559a', 'center', true);
+    const rows = [{ name: '← Retour', price: '' }].concat(SHOP.map(s => ({ name: s.name, price: S.owned.includes(s.id) ? '✓' : s.price + ' €', dim: S.money < s.price && !S.owned.includes(s.id) })));
+    rows.forEach((r, k) => {
+      const y = 86 + k * 22;
+      if (k === mini.idx) rr(22, y - 10, 196, 20, 10, '#ffd9e6');
+      txt(r.name, 32, y, 12, r.dim ? '#c7a4b5' : '#6b3f5c', 'left', k === mini.idx);
+      txt(r.price, 208, y, 12, r.price === '✓' ? '#5fcf7f' : r.dim ? '#c7a4b5' : '#8a6a1c', 'right', true);
+    });
+  } else if (mode === 'msg' || mode === 'celebrate') {
+    const m = msgQueue[0]; if (!m) return;
+    const cel = mode === 'celebrate';
+    rr(16, 96, 208, cel ? 100 : 84, 18, '#fff9fcf5', cel ? '#ffd36b' : '#f3b7d2');
+    if (cel) txt('🎉 Nouveau palier', 120, 112, 11, '#c9407f', 'center', true);
+    txt(m.title, 120, cel ? 134 : 118, cel ? 15 : 13, '#e0559a', 'center', true);
+    wrap(m.text, 120, cel ? 156 : 142, 11, '#6b3f5c', 190);
+  }
+  if (mode === 'sleep') { ctx.fillStyle = '#1a123666'; ctx.fillRect(0, 38, W, 214); const bonus = faceDownBonus(); txt(bonus ? '🌙 Lumière éteinte · sommeil ×2' : '💤 ' + Math.round(S.needs.energie) + ' % · pose le R1 face contre table', 120, 243, 9.5, '#fff', 'center', true); }
+}
+function wrap(s, x, y, size, color, maxW) {
+  ctx.font = '600 ' + size + 'px system-ui,sans-serif';
+  const words = s.split(' '); let line = '', lines = [];
+  for (const w of words) { const test = line ? line + ' ' + w : w; if (ctx.measureText(test).width > maxW) { lines.push(line); line = w; } else line = test; }
+  if (line) lines.push(line);
+  lines.slice(0, 3).forEach((l, k) => txt(l, x, y + k * (size + 3), size, color, 'center'));
+}
+function drawOverlays() {
+  // particules
+  particles = particles.filter(p => p.life > 0);
+  for (const p of particles) { ctx.globalAlpha = p.life; txt(p.ch, p.x, p.y, 11, '#000', 'center'); ctx.globalAlpha = 1; }
+  // bulle de dialogue
+  if (bubble && t < bubble.until) {
+    ctx.font = '600 10px system-ui,sans-serif'; const w = Math.min(200, ctx.measureText(bubble.text).width + 18);
+    const x = 120 - w / 2, y = 44;
+    rr(x, y, w, bubble.text.length > 34 ? 36 : 22, 10, '#ffffffee', '#f3b7d2');
+    if (bubble.text.length > 34) wrap(bubble.text, 120, y + 11, 9.5, '#6b3f5c', w - 12); else txt(bubble.text, 120, y + 11, 10, '#6b3f5c', 'center');
+  }
+  if (toastMsg && t < toastMsg.until) { ctx.font = '700 10px system-ui,sans-serif'; const w = ctx.measureText(toastMsg.text).width + 20; rr(120 - w / 2, 228, w, 18, 9, '#3a2a3aee'); txt(toastMsg.text, 120, 237, 10, '#fff', 'center', true); }
+  if (longPressing) { const r = 8 + Math.sin(t * 10) * 2; ell(120, 150, r + 10, r + 10, '#ff5fa033'); txt('🎙', 120, 150, 16, '#000', 'center'); }
+}
+
+/* ---------- Boucle ---------- */
+function frame(now) {
+  requestAnimationFrame(frame);
+  if (!S || document.hidden) return;
+  if (now - last < 33) return;            // ~30 fps, suffisant pour le R1
+  const dt = Math.min((now - last) / 1000, 0.1); last = now; t += dt;
+  tiltSm.x += (tilt.x - tiltSm.x) * 0.1;
+  scared = Math.max(0, scared - dt); loveBurst = Math.max(0, loveBurst - dt);
+  if (mini && mini.flash > 0) mini.flash -= dt;
+  for (const p of particles) { p.x += p.vx * dt; p.y += p.vy * dt; p.life -= dt * 0.9; }
+  // simulation temps réel toutes les ~5 s
+  if (Math.floor(t) % 5 === 0 && Math.floor(t) !== lastSim) { lastSim = Math.floor(t); simulate(Date.now()); }
+  // face contre table dans la pièce → dodo automatique
+  if (mode === 'room' && tilt.z < -0.6) { if (!faceDownSince) faceDownSince = t; else if (t - faceDownSince > 2.5) { faceDownSince = 0; startSleep(); } } else faceDownSince = 0;
+  // sauvegarde périodique
+  if (dirty && now - lastSave > 3000) { lastSave = now; dirty = false; R1.save(S); }
+
+  const night = isNight();
+  ctx.clearRect(0, 0, W, H);
+  drawRoom(night);
+  drawMini();
+  drawHUD();
+  drawBottom();
+  drawOverlays();
+}
+let lastSim = -1;
+
+/* ---------- Démarrage ---------- */
+async function boot() {
+  S = await R1.load();
+  if (!S) { $('setup').classList.add('on'); return; }
+  begin();
+}
+function begin() {
+  $('setup').classList.remove('on');
+  const away = simulate(Date.now());
+  checkDaily();
+  if (S.sleeping) mode = 'sleep';
+  if (away) {
+    const h = away.hours, b = away.before;
+    const diffs = NEEDS.map(k => ({ k, d: S.needs[k] - b[k] })).filter(x => Math.abs(x.d) >= 3).sort((a, b) => a.d - b.d).slice(0, 3)
+      .map(x => NEED_ICON[x.k] + ' ' + (x.d > 0 ? '+' : '') + Math.round(x.d)).join('   ');
+    const dur = h < 24 ? Math.round(h) + ' h' : (h / 24).toFixed(1) + ' j';
+    const story = ['ils ont regardé la pluie', 'ils ont dansé en pyjama', 'ils t’ont attendu·e', 'ils ont joué aux cartes', 'ils ont fait une bataille d’oreillers'][Math.floor(Math.random() * 5)];
+    msgQueue.unshift({ type: 'msg', title: 'Pendant ton absence (' + dur + ')', text: story + '. ' + (diffs || 'Rien de spécial.') });
+  }
+  if (msgQueue.length) nextMsg();
+  R1.save(S);
+  const low = NEEDS.slice().sort((a, b) => S.needs[a] - S.needs[b])[0];
+  if (!away && S.needs[low] < 30) setTimeout(() => say(NEED_NAME[low] + ' en baisse…'), 800);
+}
+$('start').onclick = () => { S = fresh($('n1').value.trim(), $('n2').value.trim()); begin(); say('Bienvenue à la maison, ' + S.names[0] + ' et ' + S.names[1] + ' !'); };
+
+/* Matériel R1 */
+window.addEventListener('scrollUp', () => onWheel(-1));
+window.addEventListener('scrollDown', () => onWheel(1));
+window.addEventListener('sideClick', onClick);
+window.addEventListener('longPressStart', onLongStart);
+window.addEventListener('longPressEnd', onLongEnd);
+/* Accéléromètre : inclinaison + secousse + face contre table */
+let lastAcc = null, lastShake = 0;
+R1.accel((x, y, z) => {
+  tilt = { x, y, z };
+  if (lastAcc) { const d = Math.abs(x - lastAcc.x) + Math.abs(y - lastAcc.y) + Math.abs(z - lastAcc.z); if (d > 0.9 && performance.now() - lastShake > 220) { lastShake = performance.now(); onShake(); } }
+  lastAcc = { x, y, z };
+});
+/* Tactile */
+let touchT = 0;
+cv.addEventListener('touchstart', e => { e.preventDefault(); const r = cv.getBoundingClientRect(); const tt = e.changedTouches[0]; touchT = performance.now(); onTap(tt.clientX - r.left, tt.clientY - r.top); }, { passive: false });
+cv.addEventListener('mousedown', e => { if (performance.now() - touchT < 500) return; const r = cv.getBoundingClientRect(); onTap(e.clientX - r.left, e.clientY - r.top); });
+/* Simulation clavier pour tester sur ordinateur */
+let spaceDown = false;
+window.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT') { if (e.key === 'Enter') $('start').click(); return; }
+  if (e.repeat && e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+  switch (e.key) {
+    case 'ArrowUp': onWheel(-1); break; case 'ArrowDown': onWheel(1); break;
+    case 'ArrowLeft': tilt.x = -0.8; break; case 'ArrowRight': tilt.x = 0.8; break;
+    case 'Enter': onClick(); break;
+    case ' ': if (!spaceDown) { spaceDown = true; onLongStart(); } break;
+    case 's': case 'S': onShake(); break;
+    case 'f': case 'F': tilt.z = tilt.z < 0 ? 1 : -1; break;
+    case 'r': case 'R': if (confirm('Réinitialiser la partie ?')) { S = fresh('Alan', 'Chérie'); R1.save(S); mode = 'room'; msgQueue = []; } break;
+    default: return;
+  }
+  e.preventDefault();
+});
+window.addEventListener('keyup', e => { if (e.key === ' ') { spaceDown = false; onLongEnd(); } if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') tilt.x = 0; });
+window.addEventListener('wheel', e => { e.preventDefault(); if (Math.abs(e.deltaY) > 2) onWheel(e.deltaY > 0 ? 1 : -1); }, { passive: false });
+document.addEventListener('visibilitychange', () => { if (!document.hidden && S) { const away = simulate(Date.now()); checkDaily(); if (msgQueue.length && mode === 'room') nextMsg(); } else if (S) R1.save(S); });
+
+requestAnimationFrame(frame);
+boot();
+</script>
+</body>
+</html>
