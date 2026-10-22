@@ -1,7 +1,13 @@
-# Petit Nid ♡ — Tamagotchi de couple pour Rabbit R1
+# Petit Nid ♡ — Tamagotchi de couple kawaii pour Rabbit R1 (v2)
 
-Jeu : https://nartiste.github.io/petit-nid/ · Installer : scanner `qr-petit-nid.png` avec la caméra du R1.
+Jeu : https://nartiste.github.io/petit-nid/ · Installer : scanner `qr-petit-nid.png` avec le R1.
 
-Un fichier, zéro dépendance. Canvas 2D 240×282. Toutes les entrées du R1 : molette, bouton latéral, appui long (voix du R1 via LLM), accéléromètre (secouer / incliner / face contre table), tactile, stockage R1, temps réel.
+Un seul fichier HTML, Canvas 2D isométrique, net sur l'écran du R1 (gestion devicePixelRatio, plein écran adaptatif).
 
-Test sur ordinateur : ouvrir index.html — ↑↓ molette, Entrée bouton, Espace maintenu appui long, S secouer, F face contre table, ←→ incliner, R réinitialiser.
+- Intro animée, petite histoire, prénoms, création des deux persos (10 styles), tutoriel interactif en 5 étapes
+- 5 pièces sur grille 6×6 sans chevauchement : Chambre, Salon, Cuisine, Salle de bain, Jardin (débloqué au niveau d'amour 2)
+- 11 mini-jeux : Mijoter et Atelier (molette, garder/suivre), Brosser les dents et Vaisselle (molette alternée), Câlin (tactile), Danser (rythme), Bercer et Balançoire (balancer le R1), Bain (secouer), Cueillir, Arroser et Ménage (incliner)
+- Incliner ← → pour changer de pièce, face contre table pour éteindre la lumière, secouer pour les surprendre, appui long pour leur parler (réponse écrite par l'IA du R1, sans la voix de l'assistant)
+- Voix kawaii synthétisées, besoins en temps réel, souhaits du jour, cadeau quotidien, série, niveaux d'amour, boutique déco, paliers (photo, chaton, bague, mariage, bébé)
+
+Test sur ordinateur : ↑↓ molette · Entrée bouton · Espace maintenu appui long · A/D/W/S incliner · Q secouer · F face contre table · R R recommencer.
