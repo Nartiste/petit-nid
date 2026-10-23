@@ -271,7 +271,7 @@ function startAccel() {
 const NEEDS = ['faim', 'energie', 'amour', 'fun', 'propre'];
 const NI = { faim: '🍙', energie: '⚡', amour: '💗', fun: '🎈', propre: '🧼' };
 const NN = { faim: 'Faim', energie: 'Énergie', amour: 'Amour', fun: 'Fun', propre: 'Propreté' };
-const DECAY = { faim: 4, energie: 3, amour: 2.5, fun: 3.5, propre: 2.5 };
+const DECAY = { faim: 6, energie: 4, amour: 4, fun: 5, propre: 4 }; // points perdus par heure : une journée sans eux = jauges dans le rouge
 
 const LOOKS = [
   { hair: '#3b2a3f', style: 'short', skin: '#ffe1cc', top: '#8ec5ff', acc: null },
@@ -290,22 +290,24 @@ const ACTS = {
   cuddle: { name: 'Câlin', icon: '💗', hint: 'Tapote l’écran ou le bouton !', game: 'calin' },
   tv: { name: 'Regarder un film', icon: '📺', hint: 'Plaid, pop-corn et film', passive: { dur: 2.8, fx: { fun: 16, amour: 4, energie: -3 } } },
   shop: { name: 'Catalogue déco', icon: '🛍️', hint: 'Décore votre nid', menu: 'shop' },
-  sew: { name: 'Atelier peluches', icon: '🧵', hint: 'Molette : suis la couture → €', game: 'atelier' },
+  sew: { name: 'Heures sup’ (atelier)', icon: '🧵', hint: 'Molette : suis la couture → 🪙 tout de suite', game: 'atelier' },
   dance: { name: 'Danser', icon: '🎶', hint: 'Bouton en rythme sur les cœurs', game: 'danse' },
   robot: { name: 'Ménage', icon: '🧹', hint: 'Incline pour piloter le robot', game: 'menage' },
   dishes: { name: 'Vaisselle', icon: '🍽️', hint: 'Molette haut-bas pour frotter', game: 'vaisselle' },
-  cook: { name: 'Cuisiner', icon: '🍲', hint: 'Molette : garde le feu au vert · 6 🪙', game: 'mijoter', cost: 6 },
-  snack: { name: 'Grignoter', icon: '🍓', hint: 'Un petit en-cas · 3 🪙', passive: { dur: 1.6, fx: { faim: 12, fun: 2 }, cost: 3 } },
-  dinner: { name: 'Dîner aux chandelles', icon: '🕯️', hint: 'Romantique · 12 🪙', passive: { dur: 3, fx: { faim: 24, amour: 14, fun: 4 }, cost: 12 } },
+  cook: { name: 'Cuisiner', icon: '🍲', hint: 'Molette : garde le feu au vert · 8 🪙', game: 'mijoter', cost: 8 },
+  snack: { name: 'Grignoter', icon: '🍓', hint: 'Un petit en-cas · 4 🪙', passive: { dur: 1.6, fx: { faim: 12, fun: 2 }, cost: 4 } },
+  dinner: { name: 'Dîner aux chandelles', icon: '🕯️', hint: 'Romantique · 15 🪙', passive: { dur: 3, fx: { faim: 24, amour: 14, fun: 4 }, cost: 15 } },
   sleep: { name: 'Dormir', icon: '🌙', hint: 'Berce le R1 pour les endormir', game: 'bercer' },
   wardrobe: { name: 'Garde-robe', icon: '👗', hint: 'Changer de look', menu: 'ward' },
   bath: { name: 'Bain moussant', icon: '🛁', hint: 'Secoue le R1 pour la mousse !', game: 'bulles' },
   teeth: { name: 'Brosser les dents', icon: '🪥', hint: 'Molette haut-bas en rythme', game: 'dents' },
-  laundry: { name: 'Lessive', icon: '🧺', hint: 'Du linge tout doux · 2 🪙', passive: { dur: 2.2, fx: { propre: 10, fun: 1 }, cost: 2 } },
+  laundry: { name: 'Lessive', icon: '🧺', hint: 'Du linge tout doux · 3 🪙', passive: { dur: 2.2, fx: { propre: 10, fun: 1 }, cost: 3 } },
   pick: { name: 'Cueillir des pommes', icon: '🍎', hint: 'Incline pour attraper', game: 'cueillir' },
   water: { name: 'Arroser les fleurs', icon: '🌷', hint: 'Incline pour verser doucement', game: 'arroser' },
   swing: { name: 'Balançoire', icon: '🎠', hint: 'Balance le R1 en rythme', game: 'balancoire' },
   map: { name: 'Changer de pièce', icon: '🗺️', hint: 'Ou incline le R1 ← →', menu: 'map' },
+  work: { name: 'Aller travailler', icon: '💼', hint: 'Ils partent 1 à 8 h et rentrent avec des 🪙', menu: 'job' },
+  carnet: { name: 'Missions & succès', icon: '📋', hint: 'Missions du jour, série, trophées', menu: 'carnet' },
 };
 const WISH_POOL = ['cuddle', 'tv', 'sew', 'dance', 'robot', 'dishes', 'cook', 'dinner', 'bath', 'teeth', 'pick', 'water', 'swing'];
 const GARDEN_ACTS = ['pick', 'water', 'swing'];
@@ -334,6 +336,62 @@ const MILESTONES = [
 ];
 
 /* ---------- pièces : grille 6×6, chaque objet occupe des cases sans chevauchement ---------- */
+/* ---------- gamification : travail, missions, succès, calendrier, événements ---------- */
+const JOBS = [
+  { name: 'Petit boulot', icon: '☕', h: 1, pay: 20, fx: { energie: -5, fun: -3 } },
+  { name: 'Journée de travail', icon: '💼', h: 4, pay: 70, fx: { energie: -8, fun: -6 } },
+  { name: 'Grosse journée', icon: '🌙', h: 8, pay: 130, fx: { energie: -12, fun: -10 } },
+];
+const CAREER = ['Stagiaires', 'Apprentis', 'Artisans', 'Chefs d’atelier', 'Patrons du nid'];
+const PROMO = [0, 3, 7, 12, 18];
+const CAL = [10, 15, 20, 25, 35, 45, 80];
+const LOOK_PRICE = 40;
+const MISSION_POOL = [
+  { t: 'games', n: 3, txt: 'Jouer à 3 mini-jeux', r: 25 },
+  { t: 'stars3', n: 1, txt: 'Décrocher 3 ★ à un jeu', r: 30 },
+  { t: 'earn', n: 60, txt: 'Gagner 60 🪙', r: 25 },
+  { t: 'work', n: 1, txt: 'Finir une journée de travail', r: 25 },
+  { t: 'feed', n: 2, txt: 'Les nourrir 2 fois', r: 20 },
+  { t: 'talk', n: 2, txt: 'Leur parler 2 fois', r: 15 },
+  { t: 'happy', n: 1, txt: 'Toutes les jauges au-dessus de 60 %', r: 30 },
+  { t: 'act', act: 'cuddle', n: 2, txt: 'Faire 2 câlins', r: 20 },
+  { t: 'act', act: 'bath', n: 1, txt: 'Un bain moussant', r: 15 },
+  { t: 'act', act: 'dance', n: 1, txt: 'Danser ensemble', r: 15 },
+  { t: 'act', act: 'cook', n: 1, txt: 'Cuisiner un plat', r: 20 },
+  { t: 'act', act: 'robot', n: 1, txt: 'Faire le ménage', r: 15 },
+  { t: 'act', act: 'teeth', n: 1, txt: 'Se brosser les dents', r: 15 },
+  { t: 'act', act: 'water', n: 1, txt: 'Arroser le jardin', r: 15, lvl: 2 },
+  { t: 'act', act: 'swing', n: 1, txt: 'Un tour de balançoire', r: 15, lvl: 2 },
+];
+const ACH = [
+  { id: 'hug10', icon: '💗', name: 'Pots de colle', txt: '10 câlins', r: 30, ok: () => (S.counts.act.cuddle || 0) >= 10 },
+  { id: 'chef', icon: '🍲', name: 'Chefs étoilés', txt: '3 ★ en cuisine', r: 30, ok: () => (S.best.mijoter || 0) >= 3 },
+  { id: 'dance', icon: '🎶', name: 'Pieds agiles', txt: '3 ★ à la danse', r: 30, ok: () => (S.best.danse || 0) >= 3 },
+  { id: 'sew', icon: '🧵', name: 'Doigts de fée', txt: '3 ★ à l’atelier', r: 30, ok: () => (S.best.atelier || 0) >= 3 },
+  { id: 'work1', icon: '💼', name: 'Premier salaire', txt: 'Finir une journée de travail', r: 20, ok: () => S.career.shifts >= 1 },
+  { id: 'promo', icon: '📈', name: 'Promotion', txt: 'Monter en grade au travail', r: 40, ok: () => S.career.lvl >= 2 },
+  { id: 'rich', icon: '🐷', name: 'Tirelire', txt: '500 🪙 gagnées au total', r: 40, ok: () => S.counts.earned >= 500 },
+  { id: 'rich2', icon: '💰', name: 'Fortune', txt: '2 000 🪙 gagnées au total', r: 80, ok: () => S.counts.earned >= 2000 },
+  { id: 'streak3', icon: '🔥', name: 'Fidèles', txt: 'Série de 3 jours', r: 30, ok: () => S.streak >= 3 },
+  { id: 'streak7', icon: '🗓️', name: 'Inséparables', txt: 'Série de 7 jours', r: 80, ok: () => S.streak >= 7 },
+  { id: 'deco5', icon: '🛋️', name: 'Décorateurs', txt: '5 objets de déco achetés', r: 40, ok: () => S.owned.filter(id => SHOP.some(x => x.id === id)).length >= 5 },
+  { id: 'garden', icon: '🌷', name: 'Main verte', txt: 'Faire fleurir le jardin', r: 40, ok: () => S.garden.stage >= 4 },
+  { id: 'happy', icon: '✨', name: 'Nid parfait', txt: 'Toutes les jauges à 80 %', r: 40, ok: () => NEEDS.every(k => S.needs[k] >= 80) },
+  { id: 'all', icon: '🎮', name: 'Touche-à-tout', txt: 'Jouer aux 12 mini-jeux', r: 50, ok: () => Object.keys(S.best).length >= 12 },
+  { id: 'miss10', icon: '📋', name: 'Assidus', txt: '10 missions accomplies', r: 50, ok: () => S.counts.missions >= 10 },
+  { id: 'lvl5', icon: '💞', name: 'Âmes sœurs', txt: 'Niveau d’amour 5', r: 80, ok: () => S.level >= 5 },
+];
+const EVENTS = [
+  { icon: '🍝', title: 'Invitation au resto', text: 'Des amis leur proposent de dîner dehors ce soir.', opts: [{ t: 'Y aller · −20 🪙', fx: { money: -20, fun: 20, amour: 8, faim: 20 } }, { t: 'Soirée cocooning', fx: { amour: 5, fun: 3 } }] },
+  { icon: '📦', title: 'Un colis mystère !', text: 'Quelqu’un a déposé un paquet devant la porte…', opts: [{ t: 'L’ouvrir', fx: 'colis' }] },
+  { icon: '💧', title: 'Fuite d’eau !', text: 'Ça goutte dans la salle de bain.', opts: [{ t: 'Réparer soi-même · −10 ⚡', fx: { energie: -10, propre: -4, xp: 12 } }, { t: 'Appeler un plombier · −25 🪙', fx: { money: -25 } }] },
+  { icon: '🐶', title: 'Le chien des voisins', text: 'Il gratte à la porte pour jouer.', opts: [{ t: 'Jouer avec lui', fx: { fun: 15, propre: -10 } }, { t: 'Le ramener chez lui', fx: { amour: 4, xp: 6 } }] },
+  { icon: '💌', title: 'Une prime !', text: 'Le patron est ravi de leur travail.', opts: [{ t: 'Youpi !', fx: { money: 30 } }], cond: () => S.career.shifts > 0 },
+  { icon: '🌧️', title: 'Il pleut des cordes', text: 'Pas question de sortir aujourd’hui.', opts: [{ t: 'Plaid et câlins', fx: { amour: 10, fun: 4 } }, { t: 'Danser sous la pluie', fx: { fun: 16, propre: -12 } }] },
+  { icon: '💢', title: 'Petite dispute', text: 'Qui a pris la télécommande ?!', opts: [{ t: 'Faire un bisou', fx: { amour: 8 } }, { t: 'Bouder', fx: { amour: -10, fun: -5 } }], cond: () => S.needs.amour < 55 },
+  { icon: '🧺', title: 'Marché du quartier', text: 'Des fruits frais à petit prix.', opts: [{ t: 'Acheter des fruits · −8 🪙', fx: { money: -8, faim: 22 } }, { t: 'Juste flâner', fx: { fun: 8, energie: -3 } }] },
+];
+
 const ROOM_ORDER = ['chambre', 'salon', 'cuisine', 'sdb', 'jardin'];
 const ROOMS = {
   chambre: {
@@ -409,7 +467,9 @@ function fresh(names, looks) {
   const now = Date.now();
   return { v: 2, names, looks, needs: { faim: 78, energie: 82, amour: 80, fun: 72, propre: 76 }, money: 50, start: now, last: now, streak: 1,
     lastVisit: dayKey(now), xp: 0, level: 1, owned: [], unlocked: [], room: 'salon', sleeping: false, lightsOff: false,
-    garden: { stage: 0, day: -1 }, wishes: { day: -1, list: [] }, tuto: 0, wardDay: -1, applesDay: -1, apples: 7 };
+    garden: { stage: 0, day: -1 }, wishes: { day: -1, list: [] }, tuto: 0, wardDay: -1, applesDay: -1, apples: 7,
+    work: null, career: { lvl: 1, shifts: 0 }, recent: {}, daily: { day: -1, missions: [], bonus: false, earned: 0 }, best: {}, ach: [],
+    counts: { act: {}, earned: 0, missions: 0 }, lookOwned: [0, 1, 2, 3].concat(looks), lastEvent: 0, events: { day: -1, n: 0 } };
 }
 function addNeed(k, v) { S.needs[k] = clamp(S.needs[k] + v, 0, 100); dirty = true; }
 function decoBonus() { return S.owned.reduce((a, id) => a + ((SHOP.find(s => s.id === id) || {}).fun || 0), 0) * .15; }
@@ -422,6 +482,7 @@ function simulate(now) {
     S.needs[k] = clamp(S.needs[k] - r * dt, 2, 100);
   }
   S.needs.fun = clamp(S.needs.fun + decoBonus() * dt, 2, 100);
+  if (S.work && now >= S.work.until) completeWork();
   if (S.sleeping && S.needs.energie >= 99.5) { S.sleeping = false; S.lightsOff = false; if (real > .25) MSGQ.push({ icon: '☀️', title: 'Bien reposés !', text: 'Ils se réveillent en pleine forme.' }); }
   S.last = now; dirty = true;
   return real > .5 ? { h: real, before } : null;
@@ -435,9 +496,10 @@ function checkDaily(first) {
   const today = dayKey(Date.now());
   if (S.lastVisit !== today) {
     S.streak = S.lastVisit === today - 1 ? S.streak + 1 : 1; S.lastVisit = today;
-    if (!first) { const g = 8 + Math.min(S.streak, 10) * 2; S.money += g; MSGQ.push({ icon: '🎁', title: 'Cadeau du jour', text: `Série de ${S.streak} jour${S.streak > 1 ? 's' : ''} d’affilée ! +${g} 🪙`, sfx: 'coin' }); }
+    if (!first) calendarGift();
   }
   if (S.wishes.day !== today) genWishes(today);
+  if (S.daily.day !== today) genMissions(today);
   if (S.applesDay !== today) { S.applesDay = today; S.apples = 7; }
   for (const m of MILESTONES) {
     if (dayCount() >= m.day && !S.unlocked.includes(m.day)) {
@@ -445,6 +507,7 @@ function checkDaily(first) {
       MSGQ.push({ icon: m.icon, title: m.title, text: m.text, big: true }); dirty = true;
     }
   }
+  checkAch();
 }
 function addXP(n) {
   if (!n) return; S.xp += Math.round(n);
@@ -458,15 +521,96 @@ function addXP(n) {
 function applyFx(fx) {
   const lines = [];
   for (const k of NEEDS) if (fx[k]) { addNeed(k, fx[k]); lines.push({ ic: NI[k], v: fx[k] }); }
-  if (fx.money) { S.money = Math.max(0, S.money + fx.money); lines.push({ ic: '🪙', v: fx.money }); }
+  if (fx.money) { if (fx.money > 0) earn(fx.money); else S.money = Math.max(0, S.money + fx.money); lines.push({ ic: '🪙', v: Math.round(fx.money) }); }
   if (fx.xp) { lines.push({ ic: '💞', v: Math.round(fx.xp), xp: true }); addXP(fx.xp); }
   dirty = true; return lines;
 }
 function checkWish(act, stars) {
   if (!S.wishes || stars < 2) return null;
   const w = S.wishes.list.find(x => x.act === act && !x.done); if (!w) return null;
-  w.done = true; S.money += 15; addNeed('amour', 10); addXP(20); dirty = true;
+  w.done = true; earn(15, true); addNeed('amour', 10); addXP(20); dirty = true;
   return S.names[w.who];
+}
+
+function earn(m, noTrack) {
+  m = Math.round(m); if (m <= 0) return 0;
+  S.money += m; S.counts.earned += m; if (!noTrack) { S.daily.earned += m; track('earn', m); }
+  dirty = true; return m;
+}
+function happyMult() { const v = NEEDS.map(k => S.needs[k]); return v.every(x => x >= 60) ? 1.25 : v.some(x => x < 20) ? .75 : 1; }
+function repeatFactor(act) {
+  const now = Date.now(), r = (S.recent[act] || []).filter(t => now - t < 2 * 3600e3);
+  S.recent[act] = r.concat([now]).slice(-4); return r.length === 0 ? 1 : r.length === 1 ? .6 : .35;
+}
+function scaleFx(fx, f, hm) { const o = {}; for (const k in fx) { let v = fx[k]; if (v > 0) v *= k === 'money' ? f * hm : f; o[k] = Math.round(v); } return o; }
+const careerMult = () => 1 + (S.career.lvl - 1) * .15;
+function fmtLeft() {
+  const tm = Math.ceil(Math.max(0, S.work.until - Date.now()) / 6e4), h = Math.floor(tm / 60), m = tm % 60;
+  return h ? `${h} h ${String(m).padStart(2, '0')}` : `${m} min`;
+}
+function calendarGift() {
+  const idx = (S.streak - 1) % 7, g = CAL[idx]; earn(g, true); let extra = '';
+  if (idx === 6) { const locked = LOOKS.map((_, k) => k).filter(k => !S.lookOwned.includes(k)); if (locked.length) { S.lookOwned.push(pick(locked)); extra = ' + un look offert !'; } }
+  MSGQ.push({ icon: '🎁', title: 'Cadeau du jour', text: `Série de ${S.streak} jour${S.streak > 1 ? 's' : ''} : +${g} 🪙${extra}`, cal: idx, sfx: 'coin' });
+}
+function genMissions(today) {
+  const pool = MISSION_POOL.filter(m => !m.lvl || S.level >= m.lvl), out = [], used = new Set(); let guard = 0;
+  while (out.length < 3 && guard++ < 200) {
+    const m = pick(pool), key = m.t + (m.act || '');
+    if (used.has(key) || (m.t === 'act' && out.some(o => o.t === 'act'))) continue;
+    used.add(key); out.push(Object.assign({}, m, { prog: 0, done: false }));
+  }
+  S.daily = { day: today, missions: out, bonus: false, earned: 0 };
+}
+function track(t, v, act) {
+  if (!S || !S.daily || !S.daily.missions) return;
+  for (const m of S.daily.missions) {
+    if (m.done || m.t !== t || (t === 'act' && m.act !== act)) continue;
+    m.prog = Math.min(m.n, m.prog + (t === 'earn' ? v : 1));
+    if (m.prog >= m.n) { m.done = true; earn(m.r, true); addXP(15); S.counts.missions++; MSGQ.push({ icon: '📋', title: 'Mission accomplie !', text: `${m.txt} · +${m.r} 🪙`, sfx: 'win' }); }
+  }
+  if (!S.daily.bonus && S.daily.missions.length && S.daily.missions.every(m => m.done)) { S.daily.bonus = true; earn(50, true); addXP(25); MSGQ.push({ icon: '🎁', title: 'Carnet du jour complet !', text: 'Les 3 missions sont faites : +50 🪙', big: true }); }
+  checkAch(); dirty = true;
+}
+function checkAch() {
+  if (!S || !S.ach) return;
+  for (const a of ACH) if (!S.ach.includes(a.id) && a.ok()) { S.ach.push(a.id); earn(a.r, true); addXP(10); MSGQ.push({ icon: '🏆', title: 'Succès : ' + a.name, text: a.txt + ' · +' + a.r + ' 🪙', sfx: 'level' }); dirty = true; }
+}
+function startWork(k) {
+  const J = JOBS[k];
+  if (S.needs.energie < 25 || S.needs.faim < 20) { toast('Trop fatigués ou affamés pour bosser'); AU.sfx('no'); return; }
+  S.work = { kind: k, start: Date.now(), until: Date.now() + J.h * 36e5 }; dirty = true; R1.save(S);
+  G.mode = 'play'; G.chars.forEach(c => c.hidden = true); G.bubble = null; AU.sfx('ok');
+  toast(J.icon + ' À tout à l’heure ! Retour dans ' + J.h + ' h'); tutoEvent('action');
+}
+function cancelWork() { S.work = null; dirty = true; G.chars.forEach(c => c.hidden = false); placeChars(0); toast('Ils rentrent plus tôt (sans paie)'); AU.sfx('back'); }
+function completeWork() {
+  const J = JOBS[S.work.kind]; S.work = null;
+  const pay = earn(J.pay * careerMult()); applyFx(J.fx);
+  S.career.shifts++;
+  MSGQ.push({ icon: '🏠', title: 'De retour du travail !', text: `${J.name} terminée : +${pay} 🪙. Ils sont un peu fatigués.`, sfx: 'coin' });
+  if (S.career.lvl < 5 && S.career.shifts >= PROMO[S.career.lvl]) { S.career.lvl++; MSGQ.push({ icon: '📈', title: 'Promotion !', text: `Les voilà ${CAREER[S.career.lvl - 1]} : paie ×${careerMult().toFixed(2)}`, big: true, sfx: 'level' }); }
+  track('work', 1); dirty = true;
+  if (scene === Main) { G.chars.forEach(c => c.hidden = false); placeChars(0); if (G.mode === 'play') G.mode = 'msg'; }
+}
+function jobPick() {
+  if (S.work) { if (G.job === 1) cancelWork(); G.mode = MSGQ.length ? 'msg' : 'play'; return; }
+  if (G.job === JOBS.length) { G.mode = 'play'; AU.sfx('back'); return; }
+  startWork(G.job);
+}
+function maybeEvent(force) {
+  const today = dayKey(Date.now()); if (S.events.day !== today) S.events = { day: today, n: 0 };
+  if (!force && (S.work || S.sleeping || S.tuto < 5 || S.events.n >= 3 || Date.now() - S.lastEvent < 2.5 * 36e5 || Math.random() > .6)) return;
+  const e = pick(EVENTS.filter(x => !x.cond || x.cond()));
+  S.events.n++; S.lastEvent = Date.now(); dirty = true;
+  MSGQ.push({ icon: e.icon, title: e.title, text: e.text, event: e, sel: 0 });
+}
+function applyEvent(m) {
+  const o = m.event.opts[m.sel || 0];
+  if (o.fx === 'colis') { const g = earn(15 + Math.floor(Math.random() * 46)); MSGQ.push({ icon: '📦', title: 'Dans le colis…', text: `${g} 🪙 et un petit mot doux ♡` }); return true; }
+  if (o.fx.money < 0 && S.money < -o.fx.money) { toast('Pas assez de 🪙'); AU.sfx('no'); return false; }
+  const lines = applyFx(o.fx); if (lines.length) toast(lines.filter(l => !l.xp).map(l => (l.v > 0 ? '+' : '') + l.v + ' ' + l.ic).join('  '));
+  return true;
 }
 
 /* ------------------------------------------------------------ runtime */
@@ -479,7 +623,7 @@ const G = {
 let GAME = null, RESULT = null; const MSGQ = [];
 
 function roomObjs(id) { return ROOMS[id].objs.filter(o => !o.own || owns(o.own)); }
-function selList() { return roomObjs(G.room).filter(o => o.act).map(o => ({ act: o.act, obj: o })).concat([{ act: 'map', obj: null }]); }
+function selList() { return [{ act: 'work', obj: null }].concat(roomObjs(G.room).filter(o => o.act).map(o => ({ act: o.act, obj: o })), [{ act: 'carnet', obj: null }, { act: 'map', obj: null }]); }
 function blocked(id) {
   const g = []; for (let a = 0; a < 6; a++) g.push([false, false, false, false, false, false]);
   for (const o of roomObjs(id)) for (let a = o.i; a < o.i + o.w; a++) for (let b = o.j; b < o.j + o.d; b++) if (a < 6 && b < 6) g[a][b] = true;
@@ -515,6 +659,7 @@ function placeChars(fromDir) {
     const tg = cen[Math.min(k + 1, cen.length - 1)]; goTo(c, tg[0], tg[1]); c.idle = rand(2, 4);
   });
   if (G.cat) { const t = pick(free); G.cat.i = t[0] + .5; G.cat.j = t[1] + .5; G.cat.path = []; }
+  if (S && (S.work || S.sleeping)) G.chars.forEach(c => c.hidden = true);
 }
 function emote(c, type, d) { c.emote = type; c.emT = d || 2; }
 function setEx(c, ex, d) { c.ex = ex; c.exT = d || 1.5; }
@@ -1225,6 +1370,7 @@ function startMain(isNew) {
   }
   placeChars(0);
   if (S.sleeping) G.chars.forEach(c => c.hidden = true);
+  if (!isNew) maybeEvent();
   setScene(Main);
   if (MSGQ.length) G.mode = 'msg';
   if (isNew) { say(0, 'Bienvenue chez nous, ' + S.names[1] + ' !'); setTimeout(() => say(1, 'C’est trop mignon ici ♡'), 2600); }
@@ -1242,6 +1388,9 @@ function goRoomRel(d) { const k = ROOM_ORDER.indexOf(G.room); goRoom(ROOM_ORDER[
 function activate() {
   const L = selList(); const e = L[clamp(G.sel, 0, L.length - 1)]; if (!e) return;
   const A = ACTS[e.act];
+  if (A.menu === 'job') { G.mode = 'job'; G.job = S.work ? 0 : 1; AU.sfx('ok'); return; }
+  if (A.menu === 'carnet') { G.mode = 'carnet'; G.carS = 0; AU.sfx('ok'); return; }
+  if (S.work && (!A.menu || A.menu === 'ward')) { toast('Ils sont au travail ⏳ ' + fmtLeft()); AU.sfx('no'); return; }
   if (A.menu === 'map') { G.mode = 'map'; G.mapSel = ROOM_ORDER.indexOf(G.room); AU.sfx('ok'); return; }
   if (A.menu === 'shop') { G.mode = 'shop'; G.shop = 0; AU.sfx('ok'); return; }
   if (A.menu === 'ward') { G.mode = 'ward'; G.ward = 0; sendToSpots(e.obj); AU.sfx('ok'); return; }
@@ -1264,10 +1413,13 @@ function startPassive(act, o) {
 }
 function endPassive() {
   const b = G.busy, A = ACTS[b.act]; G.busy = null; G.tvOn = false; G.dinner = false; G.washing = false;
-  const lines = applyFx(Object.assign({ xp: 8 }, A.passive.fx));
+  const f = repeatFactor(b.act); const lines = applyFx(scaleFx(Object.assign({ xp: 8 }, A.passive.fx), f, 1));
+  S.counts.act[b.act] = (S.counts.act[b.act] || 0) + 1; track('act', 1, b.act); if (b.act === 'snack' || b.act === 'dinner') track('feed', 1);
+  if (f < 1) toast('Encore ? Ils se lassent un peu (×' + f + ')');
   G.chars.forEach((c, k) => { const [x, y] = P(c.i, c.j, 0); if (k === 0) lines.filter(l => !l.xp).forEach((l, q) => setTimeout(() => float(x, y - 44, (l.v > 0 ? '+' : '') + l.v + ' ' + l.ic), q * 260)); emote(c, 'heart', 1.6); });
   AU.sfx('win');
   const w = checkWish(b.act, 3); if (w) { MSGQ.push({ icon: '💭', title: 'Souhait réalisé !', text: `${w} rêvait de « ${A.name} ». +15 🪙 +10 💗`, sfx: 'level' }); G.mode = 'msg'; confetti(30); }
+  if (MSGQ.length && G.mode === 'play') G.mode = 'msg';
   tutoEvent('action');
 }
 
@@ -1307,7 +1459,7 @@ const GAMES = {
       if (g.flash > 0) T('Ça bout !', W / 2 - 12, 62, 12, '#ff6b3d', 'center', 700, '#fff', 4);
       ringProg(24, H - 60, g.inZ / (11 * .78), '🍲');
     },
-    reward: s => ({ faim: 14 + Math.round(30 * s), fun: 3 + Math.round(5 * s), propre: -3, xp: 10 + 20 * s }),
+    reward: s => ({ faim: 14 + Math.round(30 * s), fun: 3 + Math.round(5 * s), propre: -3, energie: -3, xp: 10 + 20 * s }),
     title: s => s > .8 ? 'Un festin !' : s > .45 ? 'C’était bon !' : 'Un peu cramé…',
     done() { G.cooking = false; }
   },
@@ -1471,7 +1623,7 @@ const GAMES = {
       for (let k = 0; k < 3; k++) ell(sx - 10 + k * 10, sy - 13 - Math.abs(Math.sin(gt * 16 + k)) * 3, 3, 3, 'rgba(255,255,255,.95)', '#bfe3f5', .5);
       T(g.done + ' assiette' + (g.done > 1 ? 's' : '') + ' ✨', W / 2, H - 52, 12, '#2f7ab0', 'center', 700, '#fff', 4);
     },
-    reward: s => ({ propre: 8 + Math.round(14 * s), amour: 4 + Math.round(8 * s), fun: 2, xp: 8 + 12 * s }),
+    reward: s => ({ propre: 8 + Math.round(14 * s), amour: 4 + Math.round(8 * s), fun: 2, energie: -3, xp: 8 + 12 * s }),
     title: s => s > .8 ? 'Tout brille !' : s > .45 ? 'Vaisselle faite' : 'Encore un peu gras…'
   },
   cueillir: {
@@ -1512,8 +1664,8 @@ const GAMES = {
       T('🍎 × ' + g.caught, W / 2, H - 36, 13, '#c0303e', 'center', 700, '#fff', 4);
       if (!accelOn()) T('(molette pour bouger)', W / 2, H - 20, 9, '#4f7a4f', 'center', 600);
     },
-    reward: s => ({ money: 0, faim: 4 + Math.round(16 * s), fun: 6, xp: 10 + 15 * s }),
-    extra(g) { const m = g.caught * 2; S.money += m; S.apples = Math.max(0, S.apples - Math.min(4, g.caught)); return [{ ic: '🪙', v: m }]; },
+    reward: s => ({ money: 0, faim: 4 + Math.round(16 * s), fun: 6, energie: -5, xp: 10 + 15 * s }),
+    extra(g, s, f) { const m = earn(g.caught * 2 * (f || 1)); S.apples = Math.max(0, S.apples - Math.min(4, g.caught)); return m ? [{ ic: '🪙', v: m }] : []; },
     title: s => s > .8 ? 'Panier plein !' : s > .45 ? 'Belle récolte' : 'Quelques pommes'
   },
   arroser: {
@@ -1539,7 +1691,7 @@ const GAMES = {
       meterV(W - 24, 50, H - 70, g.lvl, .55, .82, g.lvl > .82 ? '#3a8fc0' : g.lvl < .55 ? '#c9a07a' : '#4fcf7f');
       ringProg(W / 2 + 40, 64, g.inZ / 5, '🌷');
     },
-    reward: s => ({ fun: 10 + Math.round(14 * s), propre: -2, xp: 10 + 15 * s }),
+    reward: s => ({ fun: 10 + Math.round(14 * s), propre: -2, energie: -3, xp: 10 + 15 * s }),
     extra(g, s) { const today = dayKey(Date.now()); if (s >= .5 && S.garden.day !== today && S.garden.stage < 4) { S.garden.stage++; S.garden.day = today; return [{ ic: '🌱', v: 1, txt: 'Les fleurs grandissent !' }]; } return []; },
     title: s => s > .8 ? 'Fleurs ravies !' : s > .45 ? 'Bien arrosé' : 'Un peu sec…'
   },
@@ -1590,7 +1742,7 @@ const GAMES = {
       gameTop(g, 1 - g.time / 15);
       T('✨ ' + g.got + ' / ' + g.crumbs.length, W / 2, H - 40, 12, '#8a5a2a', 'center', 700, '#fff', 4);
     },
-    reward: s => ({ propre: 12 + Math.round(22 * s), fun: 5, xp: 10 + 15 * s }),
+    reward: s => ({ propre: 12 + Math.round(22 * s), fun: 5, energie: -5, faim: -3, xp: 10 + 15 * s }),
     title: s => s > .8 ? 'Nid tout propre !' : s > .45 ? 'Ménage fait' : 'Il reste des moutons…'
   }
 };
@@ -1625,14 +1777,22 @@ function gameInput(type, a, b) {
 function finishGame() {
   const gm = GAME, d = gm.def, g = gm.g;
   const s = clamp(d.score(g), 0, 1), stars = s >= .8 ? 3 : s >= .45 ? 2 : 1;
-  let lines = applyFx(d.reward(s)); if (d.extra) lines = lines.concat(d.extra(g, s));
+  const f = repeatFactor(gm.act), hm = happyMult();
+  let lines = applyFx(scaleFx(d.reward(s), f, hm)); if (d.extra) lines = lines.concat(d.extra(g, s, f * hm));
   if (d.done) d.done(g, s);
+  const notes = [], prev = S.best[gm.id] || 0;
+  if (stars > prev) { S.best[gm.id] = stars; if (prev) notes.push('🏅 Nouveau record : ' + stars + ' ★ !'); }
+  if (f < 1) notes.push('😴 Encore ça ? Ils se lassent (×' + f + ')');
+  const gotMoney = lines.some(l => l.ic === '🪙' && l.v > 0);
+  if (hm > 1 && gotMoney) notes.push('✨ Foyer heureux : +25 % de 🪙'); else if (hm < 1) notes.push('😟 Foyer en crise : −25 % de 🪙');
+  S.counts.act[gm.act] = (S.counts.act[gm.act] || 0) + 1;
   const wish = checkWish(gm.act, stars);
-  RESULT = { title: d.title ? d.title(s) : d.name, icon: d.icon, stars, lines: lines.filter(l => l.v), t: 0, wish, after: d.after };
+  RESULT = { title: d.title ? d.title(s) : d.name, icon: d.icon, stars, lines: lines.filter(l => l.v), t: 0, wish, after: d.after, notes };
   GAME = null; G.mode = 'result'; focusOn(null); G.cooking = false;
   G.chars.forEach(c => { c.pose = 'stand'; c.hidden = false; setEx(c, stars >= 2 ? 'joy' : 'happy', 2.5); if (stars === 3) emote(c, 'heart', 2); });
   if (d.after === 'sleep') G.chars.forEach(c => c.hidden = true);
   if (wish) confetti(36);
+  track('games', 1); track('act', 1, gm.act); if (stars === 3) track('stars3', 1); if (gm.act === 'cook' || gm.act === 'pick') track('feed', 1);
   dirty = true;
 }
 function closeResult() {
@@ -1653,12 +1813,13 @@ const LINES = {
 };
 function chatterLine(who) {
   const low = lowestNeed(); const other = S.names[1 - who];
+  if (S.money < 15 && Math.random() < .6) return pick(['On est fauchés… on va bosser ?', 'Plus un sou ! Au travail ?', 'Il faudrait gagner un peu de 🪙…']);
   if (S.needs[low] < 35) return pick(LINES[low]);
   const l = pick(LINES.happy); return Math.random() < .35 ? other + ', ' + l.charAt(0).toLowerCase() + l.slice(1) : l;
 }
 function talk() {
   const who = Math.random() < .5 ? 0 : 1; const c = G.chars[who]; emote(c, 'question', 1.2);
-  tutoEvent('talk');
+  tutoEvent('talk'); track('talk', 1);
   const low = lowestNeed(), m = avgMood();
   const prompt = `Tu écris une réplique pour un jeu Tamagotchi kawaii. Deux personnages : ${S.names[0]} et ${S.names[1]}, un petit couple qui vit ensemble depuis ${dayCount()} jour(s). Humeur : ${m > 70 ? 'très heureux' : m > 40 ? 'tranquilles' : 'un peu grognons'}. Leur besoin le plus bas : ${NN[low]}. Il est ${new Date().getHours()} h. Écris UNE seule réplique courte (12 mots maximum), mignonne et drôle, dite par ${S.names[who]} à la personne qui joue. Réponds uniquement avec ce JSON : {"phrase":"..."}`;
   if (R1.ask(prompt)) { G.awaitTalk = { who, t: gt }; G.bubble = { who, text: '…', t0: gt, t1: gt + 7 }; }
@@ -1733,6 +1894,62 @@ function drawShop() {
   }
   if (start > 0) T('▲', W / 2, 33, 7, '#e0a0c0'); if (start + vis < rows.length) T('▼', W / 2, H - 44, 7, '#e0a0c0');
 }
+function drawWorkSign() {
+  if (S.tuto < TUTO.length) return;
+  const y = 50, p = clamp((Date.now() - S.work.start) / (S.work.until - S.work.start), 0, 1), J = JOBS[S.work.kind];
+  rr(8, y, W - 16, 34, 12, 'rgba(255,255,255,.96)', '#ffb3cf', 1.4);
+  T(J.icon + ' Au travail · retour dans ' + fmtLeft(), W / 2, y + 11, 10, '#6b3f5c', 'center', 700);
+  rr(20, y + 21, W - 40, 7, 3.5, '#f3e6ee'); rr(20, y + 21, Math.max(7, (W - 40) * p), 7, 3.5, '#ff8fb1');
+}
+function drawJob() {
+  ctx.fillStyle = 'rgba(40,20,50,.45)'; ctx.fillRect(0, 0, W, H);
+  rr(10, 8, W - 20, H - 46, 16, '#fff8fc', '#ff8fb1', 1.6);
+  T('💼 Travailler', W / 2, 23, 13, '#e0559a', 'center', 700);
+  const c = S.career, nxt = PROMO[c.lvl], cur = PROMO[c.lvl - 1];
+  T(`${CAREER[c.lvl - 1]} · niveau ${c.lvl} · paie ×${careerMult().toFixed(2)}`, W / 2, 40, 9, '#9a5a8a', 'center', 700);
+  if (nxt !== undefined) { rr(40, 48, W - 80, 6, 3, '#f3e6ee'); rr(40, 48, Math.max(6, (W - 80) * clamp((c.shifts - cur) / (nxt - cur), 0, 1)), 6, 3, '#ffd36b'); T(`Promotion : ${c.shifts} / ${nxt} journées`, W / 2, 61, 8, '#b08aa0', 'center', 600); }
+  if (S.work) {
+    const p = clamp((Date.now() - S.work.start) / (S.work.until - S.work.start), 0, 1);
+    T(JOBS[S.work.kind].icon + ' Ils sont au travail', W / 2, 84, 12, '#6b3f5c', 'center', 700);
+    rr(30, 96, W - 60, 9, 4.5, '#f3e6ee'); rr(30, 96, Math.max(9, (W - 60) * p), 9, 4.5, '#ff8fb1'); T('Retour dans ' + fmtLeft(), W / 2, 116, 10, '#9a5a8a', 'center', 700);
+    ['⏳ Les laisser travailler', '🏠 Les faire rentrer (sans paie)'].forEach((t, k) => { const yy = 144 + k * 30, sel = k === G.job; rr(22, yy - 12, W - 44, 24, 12, sel ? '#ffd9e6' : '#f7f0f4', sel ? '#e0559a' : null, 1.4); T(t, W / 2, yy, 10.5, '#6b3f5c', 'center', 700); });
+    return;
+  }
+  const can = S.needs.energie >= 25 && S.needs.faim >= 20;
+  JOBS.forEach((j, k) => {
+    const yy = 88 + k * 38, sel = k === G.job; rr(18, yy - 16, W - 36, 33, 12, sel ? '#ffd9e6' : '#f7f0f4', sel ? '#e0559a' : null, 1.4);
+    T(j.icon + ' ' + j.name, 28, yy - 5, 10.5, can ? '#6b3f5c' : '#b9a0b0', 'left', 700);
+    T(`${j.h} h · ⚡${j.fx.energie} · 🎈${j.fx.fun}`, 28, yy + 8, 8.5, '#9a7a90', 'left', 600);
+    T('+' + Math.round(j.pay * careerMult()) + ' 🪙', W - 26, yy, 12, '#a0761c', 'right', 700);
+  });
+  const yb = 88 + JOBS.length * 38, sb = G.job === JOBS.length; rr(18, yb - 13, W - 36, 22, 11, sb ? '#ffd9e6' : '#f7f0f4', sb ? '#e0559a' : null, 1.4); T('← Retour', W / 2, yb - 2, 10.5, '#6b3f5c', 'center', 700);
+  if (!can) T('Trop fatigués ou affamés (⚡ 25 et 🍙 20 minimum)', W / 2, yb + 20, 8, '#d04a6a', 'center', 700);
+}
+function drawCarnet() {
+  ctx.fillStyle = 'rgba(40,20,50,.45)'; ctx.fillRect(0, 0, W, H);
+  rr(8, 6, W - 16, H - 44, 16, '#fff8fc', '#ff8fb1', 1.6);
+  T('📋 Carnet', W / 2, 20, 13, '#e0559a', 'center', 700);
+  const rows = [{ h: 'Missions du jour' }];
+  S.daily.missions.forEach(m => rows.push({ m })); rows.push({ bonus: true });
+  rows.push({ h: 'Série : ' + S.streak + ' jour' + (S.streak > 1 ? 's' : '') + ' 🔥' }, { cal: true }, { h: 'Succès ' + S.ach.length + ' / ' + ACH.length });
+  ACH.forEach(a => rows.push({ a }));
+  const top = 32, bot = H - 42; let y = top - (G.carS || 0);
+  ctx.save(); ctx.beginPath(); ctx.rect(10, top, W - 20, bot - top); ctx.clip();
+  for (const r of rows) {
+    const rh = r.h ? 18 : r.cal ? 28 : 24;
+    if (y + rh > top - 4 && y < bot + 4) {
+      if (r.h) T(r.h, 18, y + 10, 10, '#c9407f', 'left', 700);
+      else if (r.m) { const m = r.m; rr(16, y + 2, W - 32, 21, 8, m.done ? '#e9f8ef' : '#f7f0f4'); T((m.done ? '✓ ' : '') + m.txt, 22, y + 9, 8.8, m.done ? '#2f9e5c' : '#6b3f5c', 'left', 700); rr(22, y + 15.5, W - 104, 4, 2, '#eadde5'); rr(22, y + 15.5, Math.max(4, (W - 104) * m.prog / m.n), 4, 2, m.done ? '#4fcf7f' : '#ff8fb1'); T('+' + m.r + ' 🪙', W - 22, y + 12, 9, '#a0761c', 'right', 700); }
+      else if (r.bonus) { const d = S.daily.missions.filter(m => m.done).length; T(S.daily.bonus ? '🎁 Bonus du jour récupéré ✓' : `🎁 Les 3 missions → +50 🪙 (${d}/3)`, W / 2, y + 12, 9, S.daily.bonus ? '#2f9e5c' : '#9a5a8a', 'center', 700); }
+      else if (r.cal) { const idx = (S.streak - 1) % 7; for (let k = 0; k < 7; k++) { const x = W / 2 + (k - 3) * 27, yy = y + 14; ell(x, yy, 11, 11, k < idx ? '#e9f8ef' : k === idx ? '#ffd9e6' : '#f3eef2', k === idx ? '#e0559a' : null, 1.4); T(k === 6 ? '🎁' : k < idx ? '✓' : String(CAL[k]), x, yy, k === 6 ? 10 : 8.5, k < idx ? '#2f9e5c' : '#9a5a8a', 'center', 700); } }
+      else if (r.a) { const a = r.a, got = S.ach.includes(a.id); rr(16, y + 2, W - 32, 21, 8, got ? '#fff3c4' : '#f7f0f4'); T(got ? a.icon : '🔒', 26, y + 12.5, 10); T(a.name, 38, y + 8.5, 9, got ? '#a0761c' : '#6b3f5c', 'left', 700); T(a.txt, 38, y + 17.5, 7.5, '#9a7a90', 'left', 600); T('+' + a.r + ' 🪙', W - 22, y + 12.5, 8.5, got ? '#c9a95a' : '#b9a0b0', 'right', 700); }
+    }
+    y += rh;
+  }
+  ctx.restore();
+  G.carMax = Math.max(0, y + (G.carS || 0) - bot + 6);
+  if ((G.carS || 0) < G.carMax) T('▼', W / 2, bot + 3, 8, '#e0a0c0');
+}
 function drawMap() {
   ctx.fillStyle = 'rgba(40,20,50,.45)'; ctx.fillRect(0, 0, W, H);
   rr(10, 40, W - 20, 150, 16, '#fff8fc', '#ff8fb1', 1.6); T('🗺️ Le Petit Nid', W / 2, 56, 13, '#e0559a', 'center', 700);
@@ -1755,31 +1972,35 @@ function drawWard() {
     ell(x, y, 40, 10, sel ? 'rgba(255,143,177,.35)' : 'rgba(255,255,255,.6)');
     drawChibi(x, y, LOOKS[S.looks[k]], { s: sel ? 2.2 : 1.8, expr: sel ? 'joy' : 'happy', pose: sel ? 'wave' : 'stand', facing: k ? -1 : 1, ph: k });
     T(S.names[k], x, y + 16, 11, '#6b3f5c', 'center', 700);
+    if (!S.lookOwned.includes(S.looks[k])) { rr(x - 34, y + 25, 68, 17, 8.5, '#fff', '#e0559a', 1.2); T('🔒 ' + LOOK_PRICE + ' 🪙', x, y + 33.5, 9.5, '#c9407f', 'center', 700); }
     if (sel) T('▼', x, 44 + Math.sin(gt * 6) * 2, 12, '#e0559a', 'center', 700);
   }
 }
 function drawMsg() {
   const m = MSGQ[0]; if (!m) return;
   ctx.fillStyle = 'rgba(40,20,50,.4)'; ctx.fillRect(0, 0, W, H);
-  const h = m.diffs ? 138 : 122, y = (H - h) / 2 - 10, a = clamp((gt - (m.t0 || gt)) * 5, 0, 1); if (m.t0 === undefined) { m.t0 = gt; if (m.sfx) AU.sfx(m.sfx); else AU.sfx(m.big ? 'win' : 'ok'); if (m.big) confetti(40); }
+  const h = m.event ? 92 + m.event.opts.length * 26 : (m.diffs || m.cal !== undefined) ? 140 : 122, y = (H - h) / 2 - 10, a = clamp((gt - (m.t0 || gt)) * 5, 0, 1); if (m.t0 === undefined) { m.t0 = gt; if (m.sfx) AU.sfx(m.sfx); else AU.sfx(m.big ? 'win' : 'ok'); if (m.big) confetti(40); }
   ctx.save(); ctx.translate(W / 2, y + h / 2); ctx.scale(easeBack(a), easeBack(a)); ctx.translate(-W / 2, -(y + h / 2));
   rr(16, y, W - 32, h, 18, '#fff8fc', m.big ? '#ffd36b' : '#ff8fb1', 2);
   ell(W / 2, y, 20, 20, '#fff8fc', m.big ? '#ffd36b' : '#ff8fb1', 2); T(m.icon, W / 2, y + 1, 20);
   T(m.title, W / 2, y + 34, 13, '#e0559a', 'center', 700);
   wrapLines(m.text, W - 60, 10.5, 600).slice(0, 3).forEach((l, k) => T(l, W / 2, y + 54 + k * 14, 10.5, '#6b3f5c', 'center', 600));
   if (m.diffs) m.diffs.forEach((d, k) => { const x = W / 2 + (k - (m.diffs.length - 1) / 2) * 52; rr(x - 22, y + 90, 44, 18, 9, d.d < 0 ? '#ffe3ea' : '#e3f8ea'); T(NI[d.k] + ' ' + (d.d > 0 ? '+' : '') + Math.round(d.d), x, y + 99, 10, d.d < 0 ? '#d04a6a' : '#2f9e5c', 'center', 700); });
-  T('Appuie ▸', W / 2, y + h - 12, 9.5, '#e0559a', 'center', 700);
+  if (m.cal !== undefined) for (let k = 0; k < 7; k++) { const x = W / 2 + (k - 3) * 25, yy = y + 96; ell(x, yy, 10, 10, k < m.cal ? '#e9f8ef' : k === m.cal ? '#ffd9e6' : '#f3eef2', k === m.cal ? '#e0559a' : null, 1.5); T(k === 6 ? '🎁' : k < m.cal ? '✓' : String(CAL[k]), x, yy, k === 6 ? 9 : 8, k < m.cal ? '#2f9e5c' : '#9a5a8a', 'center', 700); }
+  if (m.event) m.event.opts.forEach((o, k) => { const yy = y + 80 + k * 26, sel = k === (m.sel || 0); rr(28, yy - 11, W - 56, 22, 11, sel ? '#ffd9e6' : '#f7f0f4', sel ? '#e0559a' : null, 1.4); T((sel ? '▸ ' : '') + o.t, W / 2, yy, 10, '#6b3f5c', 'center', 700); });
+  else T('Appuie ▸', W / 2, y + h - 12, 9.5, '#e0559a', 'center', 700);
   ctx.restore();
 }
 function drawResult() {
   const r = RESULT; ctx.fillStyle = `rgba(40,20,50,${.35 * Math.min(1, r.t * 4)})`; ctx.fillRect(0, 0, W, H);
-  const a = easeBack(clamp(r.t * 3, 0, 1)), h = r.wish ? 168 : 146, y = (H - h) / 2 - 10;
+  const nn = (r.notes || []).length, a = easeBack(clamp(r.t * 3, 0, 1)), h = (r.wish ? 168 : 146) + nn * 15, y = (H - h) / 2 - 10;
   ctx.save(); ctx.translate(W / 2, y + h / 2); ctx.scale(a, a); ctx.translate(-W / 2, -(y + h / 2));
   rr(14, y, W - 28, h, 18, '#fff8fc', '#ff8fb1', 2);
   T(r.icon + ' ' + r.title, W / 2, y + 20, 13, '#e0559a', 'center', 700);
   for (let k = 0; k < 3; k++) { const p = clamp((r.t - .35 - k * .28) * 4, 0, 1), on = k < r.stars; const x = W / 2 + (k - 1) * 34, sy = y + 50 - (k === 1 ? 6 : 0); star(x, sy, 14, '#f3e6ee'); if (on && p > 0) { ctx.save(); ctx.translate(x, sy); ctx.scale(easeBack(p), easeBack(p)); star(0, 0, 14, '#ffd23a', '#e0a020'); ctx.restore(); if (!r['s' + k]) { r['s' + k] = 1; AU.sfx('star', 1 + k * .2); sspawn(x, sy, 'star', 4, { vy: 60, life: .8 }); } } }
   const ls = r.lines.filter(l => l.v); const per = 3;
   ls.forEach((l, k) => { const row = Math.floor(k / per), col = k % per, n = Math.min(per, ls.length - row * per); const x = W / 2 + (col - (n - 1) / 2) * 62, yy = y + 84 + row * 22; rr(x - 28, yy - 9, 56, 18, 9, l.v < 0 ? '#ffe3ea' : '#e9f8ef'); T((l.v > 0 ? '+' : '') + l.v + ' ' + l.ic, x, yy, 10, l.v < 0 ? '#d04a6a' : '#2f9e5c', 'center', 700); });
+  (r.notes || []).forEach((t, k) => T(t, W / 2, y + h - (r.wish ? 54 : 26) - (nn - k) * 15 + 6, 9, '#9a5a8a', 'center', 700));
   if (r.wish) { rr(24, y + h - 50, W - 48, 22, 11, '#fff3c4', '#ffd36b', 1.2); T('💭 Souhait de ' + r.wish + ' réalisé ! +15 🪙', W / 2, y + h - 39, 9.5, '#a0761c', 'center', 700); }
   if (r.t > .9) T('Appuie ▸', W / 2, y + h - 12, 9.5, '#e0559a', 'center', 700);
   ctx.restore();
@@ -1787,7 +2008,7 @@ function drawResult() {
 
 /* ------------------------------------------------------------ HUD */
 function drawHUD() {
-  rr(4, 3, 58, 18, 9, 'rgba(255,255,255,.93)'); T('J' + dayCount(), 13, 12.5, 10, '#e0559a', 'left', 700); T('🔥' + S.streak, 36, 12.5, 9, '#c96a2a', 'left', 700);
+  rr(4, 3, 58, 18, 9, 'rgba(255,255,255,.93)'); T('J' + dayCount(), 10, 12.5, 9.5, '#e0559a', 'left', 700); { const md = S.daily.missions.filter(m => m.done).length; T('📋' + md + '/3', 29, 12.5, 8.5, md === 3 ? '#2f9e5c' : '#9a5a8a', 'left', 700); }
   const R = ROOMS[G.room]; rr(W / 2 - 46, 3, 92, 18, 9, 'rgba(255,255,255,.93)'); T(R.icon + ' ' + R.name, W / 2, 11, 9.5, '#6b3f5c', 'center', 700);
   ROOM_ORDER.forEach((id, k) => ell(W / 2 - 12 + k * 6, 18, 1.3, 1.3, id === G.room ? '#e0559a' : '#ead3df'));
   rr(W - 62, 3, 58, 18, 9, 'rgba(255,255,255,.93)'); T('🪙 ' + S.money, W - 33, 12.5, 10, '#a0761c', 'center', 700);
@@ -1813,11 +2034,13 @@ function drawBottom() {
   else if (G.mode === 'shop') { label = 'Molette : parcourir'; hint = 'Bouton : acheter · « Retour » pour sortir'; }
   else if (G.mode === 'map') { label = '🗺️ ' + ROOMS[ROOM_ORDER[G.mapSel]].name; hint = 'Molette : choisir · Bouton : y aller'; arrows = true; }
   else if (G.mode === 'ward') { label = '👗 Look de ' + S.names[G.ward]; hint = 'Molette : changer · Bouton : ' + (G.ward ? 'terminer' : 'suivant'); arrows = true; }
-  else if (G.mode === 'result' || G.mode === 'msg') { label = '♡'; hint = 'Appuie pour continuer'; }
+  else if (G.mode === 'job') { label = '💼 Travailler'; hint = 'Molette : choisir · Bouton : valider'; }
+  else if (G.mode === 'carnet') { label = '📋 Carnet'; hint = 'Molette : défiler · Bouton : fermer'; }
+  else if (G.mode === 'result' || G.mode === 'msg') { label = '♡'; hint = MSGQ[0] && MSGQ[0].event && G.mode === 'msg' ? 'Molette : choisir · Bouton : valider' : 'Appuie pour continuer'; }
   else if (S.sleeping) { label = '💤 Ils dorment · ⚡ ' + Math.round(S.needs.energie) + ' %'; hint = S.lightsOff ? '🌙 Lumière éteinte · bouton : réveiller' : 'Face contre table : éteindre · bouton : réveiller'; }
   else if (G.longOn) { label = '🎙 Ils t’écoutent…'; hint = 'Relâche pour qu’ils te répondent'; }
   else if (G.busy) { const A = ACTS[G.busy.act]; label = A.icon + ' ' + A.name + '…'; hint = 'Un instant ♡'; }
-  else { const L = selList(), e = L[clamp(G.sel, 0, L.length - 1)], A = ACTS[e.act]; label = A.icon + ' ' + A.name; hint = A.hint; arrows = true; }
+  else { const L = selList(), e = L[clamp(G.sel, 0, L.length - 1)], A = ACTS[e.act]; label = A.icon + ' ' + A.name; hint = A.hint; arrows = true; if (S.work) { if (e.act === 'work') { label = '💼 Au travail'; hint = 'Retour dans ' + fmtLeft(); } else if (e.obj) hint = 'Ils sont au travail ⏳ ' + fmtLeft(); } }
   rr(4, y, W - 8, 30, 12, 'rgba(255,255,255,.96)', 'rgba(224,85,154,.3)', 1.2);
   if (arrows) { T('‹', 14, y + 14, 16, '#e0559a', 'center', 700); T('›', W - 14, y + 14, 16, '#e0559a', 'center', 700); }
   T(label, W / 2, y + 10.5, 11.5, '#c9407f', 'center', 700);
@@ -1937,7 +2160,7 @@ const Main = {
       if (!tr.swapped && tr.t >= .5) { tr.swapped = true; G.room = tr.to; S.room = tr.to; G.sel = 0; placeChars(tr.dir); tutoEvent('room'); dirty = true; }
       if (tr.t >= 1) G.trans = null;
     }
-    if (Math.floor(gt / 5) !== Math.floor((gt - dt) / 5)) { simulate(Date.now()); checkDaily(false); if (MSGQ.length && G.mode === 'play') G.mode = 'msg'; }
+    if (Math.floor(gt / 5) !== Math.floor((gt - dt) / 5)) { simulate(Date.now()); checkDaily(false); if (NEEDS.every(k => S.needs[k] >= 60)) track('happy', 1); else checkAch(); G.evT = (G.evT || 0) + 5; if (G.evT >= 600 && G.mode === 'play' && !G.busy) { G.evT = 0; maybeEvent(); } if (MSGQ.length && G.mode === 'play') G.mode = 'msg'; }
     if (GAME) updGame(dt);
     if (G.busy) { G.busy.t += dt; if (G.busy.t >= G.busy.dur) endPassive(); }
     if (RESULT) RESULT.t += dt;
@@ -1951,7 +2174,7 @@ const Main = {
       } else {
         c.walk = 0;
         if (c.look) { const [ox] = P(c.look.i + c.look.w / 2, c.look.j + c.look.d / 2); const [x] = P(c.i, c.j); if (Math.abs(ox - x) > 2) c.facing = ox > x ? 1 : -1; }
-        if (G.mode === 'play' && !G.busy && !S.sleeping) {
+        if (G.mode === 'play' && !G.busy && !S.sleeping && !S.work) {
           c.idle -= dt;
           if (c.idle <= 0) {
             c.idle = rand(3.5, 8); c.look = null; const free = freeTiles(G.room); const o = G.chars[1 - c.who];
@@ -1984,11 +2207,11 @@ const Main = {
       G.faceT += dt;
       if (G.faceT > 1.5) {
         if (S.sleeping && !S.lightsOff) { S.lightsOff = true; dirty = true; AU.sfx('back'); toast('🌙 Lumière éteinte'); }
-        else if (!S.sleeping && G.mode === 'play' && !G.busy && S.needs.energie < 90) { S.sleeping = true; S.lightsOff = true; dirty = true; if (G.room !== 'chambre') { G.room = 'chambre'; S.room = 'chambre'; G.sel = 0; } G.chars.forEach(c => c.hidden = true); toast('🌙 Dodo, lumière éteinte'); }
+        else if (!S.sleeping && !S.work && G.mode === 'play' && !G.busy && S.needs.energie < 90) { S.sleeping = true; S.lightsOff = true; dirty = true; if (G.room !== 'chambre') { G.room = 'chambre'; S.room = 'chambre'; G.sel = 0; } G.chars.forEach(c => c.hidden = true); toast('🌙 Dodo, lumière éteinte'); }
       }
     } else G.faceT = 0;
     if (S.sleeping && Math.random() < dt * .8) { const [x, y] = P(.7, 3, 30); spawn(x + 6, y, 'zzz', 1, { vy: 10, vx: 4, sx: 2, life: 2 }); }
-    if (G.mode === 'play' && !G.busy && !S.sleeping && !G.bubble) { G.chatT -= dt; if (G.chatT <= 0) { G.chatT = rand(20, 38); const w = Math.random() < .5 ? 0 : 1; say(w, chatterLine(w)); } }
+    if (G.mode === 'play' && !G.busy && !S.sleeping && !S.work && !G.bubble) { G.chatT -= dt; if (G.chatT <= 0) { G.chatT = rand(20, 38); const w = Math.random() < .5 ? 0 : 1; say(w, chatterLine(w)); } }
     if (G.bubble && gt > G.bubble.t1) G.bubble = null;
     if (G.awaitTalk && gt - G.awaitTalk.t > 6) { say(G.awaitTalk.who, chatterLine(G.awaitTalk.who)); G.awaitTalk = null; }
     if (G.toast && gt - G.toast.t0 > 2.4) G.toast = null;
@@ -2004,7 +2227,7 @@ const Main = {
       drawWorld(); ctx.restore();
       drawSpeech();
       if (GAME && GAME.t >= 0) { gameTop(GAME, GAME.def.dur ? 1 - GAME.g.time / GAME.def.dur : 1); GAME.def.draw.call(GAME.def, GAME.g); }
-      else if (G.mode !== 'game') drawHUD();
+      else if (G.mode !== 'game') { drawHUD(); if (S.work && G.mode === 'play') drawWorkSign(); }
       drawTiltHint();
     }
     for (const p of G.sparts) drawSPart(p);
@@ -2017,6 +2240,8 @@ const Main = {
     }
     if (G.mode === 'shop') drawShop();
     if (G.mode === 'map') drawMap();
+    if (G.mode === 'job') drawJob();
+    if (G.mode === 'carnet') drawCarnet();
     if (RESULT) drawResult();
     if (G.mode === 'msg') drawMsg();
     drawTuto();
@@ -2027,7 +2252,14 @@ const Main = {
   input(type, a, b) {
     if (G.trans) return;
     if (type === 'tap' && b > H - 34 && !['game', 'result', 'msg'].includes(G.mode)) { if (a < 44) type = 'wheel', a = -1; else if (a > W - 44) type = 'wheel', a = 1; else type = 'click'; }
-    if (G.mode === 'msg') { if (type === 'click' || type === 'tap') { const m = MSGQ.shift(); if (!MSGQ.length) G.mode = RESULT ? 'result' : 'play'; AU.sfx('tick'); } return; }
+    if (G.mode === 'msg') {
+      const m = MSGQ[0];
+      if (m && m.event && type === 'wheel') { m.sel = ((m.sel || 0) + a + m.event.opts.length) % m.event.opts.length; AU.sfx('tick'); return; }
+      if (type === 'click' || type === 'tap') { if (m && m.event && !applyEvent(m)) return; MSGQ.shift(); if (!MSGQ.length) G.mode = RESULT ? 'result' : 'play'; AU.sfx('tick'); }
+      return;
+    }
+    if (G.mode === 'job') { const n = S.work ? 2 : JOBS.length + 1; if (type === 'wheel') { G.job = (G.job + a + n) % n; AU.sfx('tick'); } else if (type === 'click' || type === 'tap') jobPick(); return; }
+    if (G.mode === 'carnet') { if (type === 'wheel') { G.carS = clamp(G.carS + a * 24, 0, G.carMax || 0); AU.sfx('tick'); } else if (type === 'click' || type === 'tap') { G.mode = 'play'; AU.sfx('back'); } return; }
     if (G.mode === 'result') { if ((type === 'click' || type === 'tap') && RESULT && RESULT.t > .8) { AU.sfx('tick'); closeResult(); } return; }
     if (G.mode === 'game') { gameInput(type, a, b); return; }
     if (G.mode === 'shop') {
@@ -2040,7 +2272,10 @@ const Main = {
     }
     if (G.mode === 'ward') {
       if (type === 'wheel') { S.looks[G.ward] = (S.looks[G.ward] + a + LOOKS.length) % LOOKS.length; AU.sfx('pop', 1 + S.looks[G.ward] * .05); dirty = true; }
-      else if (type === 'click' || type === 'tap') { AU.sfx('ok'); if (G.ward === 0) G.ward = 1; else { G.mode = 'play'; if (S.wardDay !== S.lastVisit) { S.wardDay = S.lastVisit; addNeed('fun', 6); float(...P(3, 2, 50), '+6 🎈'); } G.chars.forEach(c => { c.look = null; setEx(c, 'joy', 2); }); tutoEvent('action'); } } return;
+      else if (type === 'click' || type === 'tap') {
+        const lk = S.looks[G.ward];
+        if (!S.lookOwned.includes(lk)) { if (S.money >= LOOK_PRICE) { S.money -= LOOK_PRICE; S.lookOwned.push(lk); AU.sfx('coin'); toast('Nouveau look débloqué ♡'); dirty = true; } else { toast(`Il manque ${LOOK_PRICE - S.money} 🪙 pour ce look`); AU.sfx('no'); } return; }
+        AU.sfx('ok'); if (G.ward === 0) G.ward = 1; else { G.mode = 'play'; if (S.wardDay !== S.lastVisit) { S.wardDay = S.lastVisit; addNeed('fun', 6); float(...P(3, 2, 50), '+6 🎈'); } G.chars.forEach(c => { c.look = null; setEx(c, 'joy', 2); }); tutoEvent('action'); } } return;
     }
     if (S.tuto === 4 && (type === 'click' || type === 'tap')) { tutoEvent('click'); return; }
     if (S.tuto >= 2 && S.tuto <= 3 && G.tutoT > 8 && (type === 'click' || type === 'tap')) { S.tuto++; G.tutoT = 0; AU.sfx('star'); return; }
@@ -2055,7 +2290,7 @@ const Main = {
       case 'click': activate(); break;
       case 'tap': {
         const [wx, wy] = s2w(a, b);
-        for (const c of G.chars) { const [x, y] = P(c.i, c.j); if (Math.hypot(wx - x, wy - (y - 20)) < 16) { setEx(c, 'joy', 1.5); emote(c, 'giggle', 1.4); AU.babble('hihi', c.who ? 600 : 420); addNeed('fun', 1); return; } }
+        for (const c of G.chars) { if (c.hidden) continue; const [x, y] = P(c.i, c.j); if (Math.hypot(wx - x, wy - (y - 20)) < 16) { setEx(c, 'joy', 1.5); emote(c, 'giggle', 1.4); AU.babble('hihi', c.who ? 600 : 420); addNeed('fun', 1); return; } }
         if (G.cat && owns('chat')) { const [x, y] = P(G.cat.i, G.cat.j); if (Math.hypot(wx - x, wy - (y - 8)) < 12) { AU.sfx('purr'); spawn(x, y - 16, 'heart', 2); addNeed('fun', 1); G.cat.sleep = false; return; } }
         const L = selList(); let hit = -1;
         L.forEach((e, k) => { const o = e.obj; if (!o) return; const hull = [P(o.i, o.j + o.d), P(o.i + o.w, o.j + o.d), P(o.i + o.w, o.j), P(o.i + o.w, o.j, o.h), P(o.i, o.j, o.h), P(o.i, o.j + o.d, o.h)]; if (inPoly(wx, wy, hull)) hit = k; });
@@ -2063,8 +2298,8 @@ const Main = {
         break;
       }
       case 'longStart': G.longOn = true; AU.sfx('tick'); break;
-      case 'longEnd': if (G.longOn) { G.longOn = false; talk(); } break;
-      case 'shake': G.shake = 1.4; G.chars.forEach(c => { emote(c, 'dizzy', 1.4); setEx(c, 'dizzy', 1.4); }); AU.sfx('boing'); addNeed('fun', -1); say(Math.random() < .5 ? 0 : 1, pick(['Ouh là, ça tremble !', 'Tremblement de terre ?!', 'Ma tête tourne…'])); break;
+      case 'longEnd': if (G.longOn) { G.longOn = false; if (S.work) toast('Ils sont au travail ⏳'); else talk(); } break;
+      case 'shake': if (S.work) break; G.shake = 1.4; G.chars.forEach(c => { emote(c, 'dizzy', 1.4); setEx(c, 'dizzy', 1.4); }); AU.sfx('boing'); addNeed('fun', -1); say(Math.random() < .5 ? 0 : 1, pick(['Ouh là, ça tremble !', 'Tremblement de terre ?!', 'Ma tête tourne…'])); break;
     }
   }
 };
@@ -2152,7 +2387,7 @@ async function boot() {
   setScene(Title);
   requestAnimationFrame(frame);
 }
-window.PN = { get S() { return S; }, G, GAMES, startGame: (id) => { const a = Object.keys(ACTS).find(k => ACTS[k].game === id); const o = Object.values(ROOMS).flatMap(r => r.objs).find(o => o.act === a); startGame(id, o, a); }, goRoom: id => { G.room = id; S.room = id; G.sel = 0; placeChars(0); }, night: v => { FORCE_NIGHT = v; }, give: m => { S.money += m; }, own: id => { if (!owns(id)) S.owned.push(id); }, level: l => { S.level = l; }, finish: () => GAME && finishGame(), get mode() { return G.mode; }, get scene() { return scene === Main ? 'main' : scene === Title ? 'title' : scene === Story ? 'story' : scene === Names ? 'names' : scene === Style ? 'style' : '?'; } };
+window.PN = { ff: h => { S.last -= h * 36e5; if (S.work) { S.work.until -= h * 36e5; S.work.start -= h * 36e5; } simulate(Date.now()); if (MSGQ.length) G.mode = 'msg'; }, event: () => { maybeEvent(true); G.mode = 'msg'; }, get S() { return S; }, G, GAMES, startGame: (id) => { const a = Object.keys(ACTS).find(k => ACTS[k].game === id); const o = Object.values(ROOMS).flatMap(r => r.objs).find(o => o.act === a); startGame(id, o, a); }, goRoom: id => { G.room = id; S.room = id; G.sel = 0; placeChars(0); }, night: v => { FORCE_NIGHT = v; }, give: m => { S.money += m; }, own: id => { if (!owns(id)) S.owned.push(id); }, level: l => { S.level = l; }, finish: () => GAME && finishGame(), get mode() { return G.mode; }, get scene() { return scene === Main ? 'main' : scene === Title ? 'title' : scene === Story ? 'story' : scene === Names ? 'names' : scene === Style ? 'style' : '?'; } };
 boot();
 </script>
 </body>
